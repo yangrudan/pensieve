@@ -82,4 +82,41 @@ class GenerationGuardTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as c:urllib.request.urlopen(req)
         self.assertEqual(c.exception.code,403)
 
+
+class AtlasTests(unittest.TestCase):
+    setUp=GenerationGuardTests.setUp
+    tearDown=GenerationGuardTests.tearDown
+    post=GenerationGuardTests.post
+    def atlas_post(self,body,token=True):
+        headers={'Content-Type':'application/json'}
+        if token:headers['X-Pensieve-Token']=server.TOKEN
+        req=urllib.request.Request(self.root+'/api/atlas',data=json.dumps(body).encode(),headers=headers)
+        try:
+            with urllib.request.urlopen(req) as r:return r.status,json.load(r)
+        except urllib.error.HTTPError as e:return e.code,json.load(e)
+    def test_places_and_tags_persist_without_key_or_quota(self):
+        _,m=self.post();before=server.STATE['attempts'];server.KEY=''
+        status,a=self.atlas_post({'action':'place','name':'海边','color':'#abcdef'})
+        self.assertEqual(status,200);pid=a['places'][-1]['id']
+        status,a=self.atlas_post({'action':'tag','memory_id':m['id'],'place_ids':['home',pid]})
+        self.assertEqual(status,200)
+        server.STATE=json.loads((server.DATA/'state.json').read_text())
+        self.assertEqual(server.STATE['memory_places'][m['id']],['home',pid])
+        self.assertEqual(server.STATE['attempts'],before)
+        self.assertEqual(self.atlas_post({'action':'place','id':pid,'name':'海边的家','color':'#112233'})[0],200)
+        self.assertEqual(self.atlas_post({'action':'tag','memory_id':m['id'],'place_ids':[]})[0],200)
+    def test_invalid_or_forged_tags_do_not_change_state(self):
+        for body in [{'action':'tag','memory_id':'missing','place_ids':['home']},{'action':'place','name':'地点','color':'red'},{'action':'tag','memory_id':'missing','place_ids':['invented']},{'action':'place','name':'家','color':'#112233'}]:
+            self.assertEqual(self.atlas_post(body)[0],400)
+        self.assertEqual(self.atlas_post({'action':'place','name':'秘密','color':'#112233'},token=False)[0],403)
+        self.assertEqual(server.STATE,{'attempts':0,'memories':{}})
+    def test_local_photo_archive_deduplicates_and_migrates_to_generated_memory(self):
+        out=io.BytesIO();Image.new('RGB',(30,20),'green').save(out,format='PNG')
+        body={'action':'tag','name':'local','image':base64.b64encode(out.getvalue()).decode(),'place_ids':['home']}
+        status,a=self.atlas_post(body);self.assertEqual(status,200);archive=a['memory_id']
+        self.assertTrue((server.DATA/f'{archive}.jpg').exists());self.assertEqual(server.STATE['attempts'],0);self.start.assert_not_called()
+        self.assertEqual(self.atlas_post(body)[1]['memory_id'],archive);self.assertEqual(len(server.STATE['archives']),1)
+        status,m=self.post(archive_id=archive);self.assertEqual(status,202)
+        self.assertEqual(server.STATE['memory_places'][m['id']],['home']);self.assertNotIn(archive,server.STATE['archives'])
+
 if __name__=='__main__':unittest.main()

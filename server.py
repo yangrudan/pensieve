@@ -5,6 +5,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 from PIL import Image, ImageOps
+import atlas_store
 from manycore.aholo_sdk_core import AholoClientConfig
 from manycore.aholo_sdk_asset import create_asset_client
 from manycore.aholo_sdk_lux3d import create_lux3d_client
@@ -255,6 +256,8 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/session':
             with LOCK: return self.json_response({'configured':bool(KEY),'token':TOKEN,'attempts':STATE['attempts'],'limit':LIMIT})
+        if path == '/api/atlas':
+            with LOCK: return self.json_response(atlas_store.snapshot(STATE))
         if path == '/api/memories':
             with LOCK: return self.json_response({'items':[public(m) for m in STATE['memories'].values()],'attempts':STATE['attempts'],'limit':LIMIT})
         if path.startswith('/world-assets/'):
@@ -289,8 +292,19 @@ class Handler(SimpleHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if origin and origin not in (f'http://localhost:{PORT}',f'http://127.0.0.1:{PORT}'):
             return self.json_response({'error':'Invalid origin'},403)
-        if not KEY: return self.json_response({'error':'服务端尚未配置 AHOLO_KEY'},503)
         path = urlsplit(self.path).path
+        if path == '/api/atlas':
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<18*1024*1024:raise ValueError('内容大小超限')
+                body=json.loads(self.rfile.read(length))
+                with LOCK:
+                    result=atlas_store.mutate(STATE,body,DATA,prepare_image);save()
+                return self.json_response(result)
+            except (ValueError,TypeError,KeyError,AttributeError,Image.DecompressionBombError) as exc:
+                return self.json_response({'error':str(exc) if isinstance(exc,ValueError) else '无法保存，请检查输入'},400)
+            except OSError:return self.json_response({'error':'本地保存失败，请重试'},500)
+        if not KEY: return self.json_response({'error':'服务端尚未配置 AHOLO_KEY'},503)
         if path.startswith('/api/resume/'):
             mid=path.rsplit('/',1)[-1]
             with LOCK:
@@ -316,7 +330,9 @@ class Handler(SimpleHTTPRequestHandler):
             prefix={'lux3d':b'','world':b'world-v1:','fourview':b'fourview-isolate-v1:','multiview':f'multiview-g1-v1:{source_id}:'.encode()}[mode]
             mid=hashlib.sha256(prefix+data).hexdigest()
             with LOCK:
-                if mid in STATE['memories']: return self.json_response(public(STATE['memories'][mid]))
+                if mid in STATE['memories']:
+                    atlas_store.migrate_archive(STATE,body.get('archive_id'),mid);save()
+                    return self.json_response(public(STATE['memories'][mid]))
                 if ACTIVE:return self.json_response({'error':'已有记忆正在生成，请等待完成后再提交下一张'},409)
                 if STATE['attempts']>=LIMIT:return self.json_response({'error':'已达到本轮 10 次生成上限'},429)
                 (DATA/f'{mid}.jpg').write_bytes(data)
@@ -324,7 +340,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if mode=='world':m.update(mode='world',source='AHOLO World',version='Spatial Gen')
                 elif mode=='fourview':m.update(mode='fourview',source='AHOLO 四视图',version='Four View')
                 elif mode=='multiview':m.update(mode='multiview',source='AHOLO Lux3D · 四视图建模',version='G1',view_source_id=source_id,face_count=200000)
-                STATE['attempts']+=1;STATE['memories'][mid]=m;save();start(mid,True)
+                STATE['attempts']+=1;STATE['memories'][mid]=m;atlas_store.migrate_archive(STATE,body.get('archive_id'),mid);save();start(mid,True)
                 return self.json_response(public(m),202)
         except (ValueError,KeyError,TypeError,OSError,Image.DecompressionBombError):return self.json_response({'error':'无法读取照片，请选择 JPG、PNG 或 WebP'},400)
 
