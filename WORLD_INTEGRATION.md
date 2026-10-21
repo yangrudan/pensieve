@@ -1,12 +1,12 @@
 # World 接入与空间验证
 
-当前已接入 World 单图空间生成、后台查询和本地 3DGS/全景缓存。独立验证入口为 http://localhost:4174/world/ 。冥想盆中已生成的 World 记忆会提供对应入口。默认照片生成按钮仍为 Lux3D，尚未加入自动路由。World 由独立的 Aholo Viewer 加载。
+当前已接入 World 单图空间生成、后台查询和本地 3DGS/全景缓存。独立验证入口为 http://localhost:4174/world/ 。冥想盆中已生成的 World 记忆直接嵌入空间查看器。生成前由用户选择「物件 / 空间」，没有自动分类。World 由独立的 Aholo Viewer 加载。
 
 ## 推荐的第一阶段
 
 单张室内照片 → Asset 上传 → World generations.create → 持久化 worldId → 查询 SUCCEEDED → 缓存空间资源 → 触碰水面打开 Aholo Viewer。
 
-界面增加「物件记忆 / 空间记忆」，首次只做空间内环顾和有限移动。不要把没有碰撞体的相机飞行称为可行走漫游。
+界面已有「物件 / 空间」选择，目前只做空间内环顾和有限移动。不要把没有碰撞体的相机飞行称为可行走漫游。
 
 ## 服务端
 

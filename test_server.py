@@ -17,9 +17,9 @@ class GenerationGuardTests(unittest.TestCase):
     def tearDown(self):
         self.http.shutdown();self.http.server_close();patch.stopall()
         server.DATA,server.STATE,server.KEY,server.PORT=self.old;server.ACTIVE.clear();self.temp.cleanup()
-    def post(self,color=0,token=True,mode="lux3d"):
+    def post(self,color=0,token=True,mode="lux3d",**extra):
         im=Image.new('RGB',(16,16),(color*20,0,0));out=io.BytesIO();im.save(out,format='PNG')
-        body=json.dumps({'image':base64.b64encode(out.getvalue()).decode(),'name':'test','mode':mode}).encode()
+        body=json.dumps({'image':base64.b64encode(out.getvalue()).decode(),'name':'test','mode':mode,**extra}).encode()
         headers={'Content-Type':'application/json'}
         if token:headers['X-Pensieve-Token']=server.TOKEN
         req=urllib.request.Request(self.root+'/api/memories',data=body,headers=headers)
@@ -56,6 +56,27 @@ class GenerationGuardTests(unittest.TestCase):
         self.assertEqual(self.post(1,mode='world')[0],429)
     def test_unknown_generation_mode_cannot_spend(self):
         self.assertEqual(self.post(mode='anything')[0],400);self.assertEqual(server.STATE['attempts'],0)
+    def test_fourview_shares_budget_and_deduplicates(self):
+        a=self.post(mode='fourview');b=self.post(mode='fourview')
+        self.assertEqual((a[0],b[0]),(202,200));self.assertEqual(a[1]['id'],b[1]['id'])
+        self.assertEqual(server.STATE['attempts'],1)
+        server.STATE['attempts']=10
+        self.assertEqual(self.post(1,mode='fourview')[0],429)
+    def test_multiview_requires_complete_local_views_before_spending(self):
+        self.assertEqual(self.post(mode='multiview',view_source_id='missing')[0],400)
+        _,source=self.post(mode='fourview');mid=source['id']
+        self.assertEqual(self.post(mode='multiview',view_source_id=mid)[0],400)
+        source=server.STATE['memories'][mid];source.update(status='ready',views=['view']*4)
+        self.assertEqual(self.post(mode='multiview',view_source_id=mid)[0],400)
+        self.assertEqual(server.STATE['attempts'],1)
+        (server.DATA/mid).mkdir()
+        for i in range(4):(server.DATA/mid/f'view-{i}.jpg').write_bytes(b'cached')
+        status,result=self.post(mode='multiview',view_source_id=mid)
+        self.assertEqual(status,202);self.assertEqual(result['face_count'],200000)
+        self.assertEqual(self.post(mode='multiview',view_source_id=mid)[0],200)
+        self.assertEqual(server.STATE['attempts'],2)
+        server.STATE['attempts']=10
+        self.assertEqual(self.post(1,mode='multiview',view_source_id=mid)[0],429)
     def test_host_validation(self):
         req=urllib.request.Request(self.root+'/api/session',headers={'Host':'untrusted.example'})
         with self.assertRaises(urllib.error.HTTPError) as c:urllib.request.urlopen(req)

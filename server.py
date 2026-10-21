@@ -32,7 +32,7 @@ def update(mid, **values):
         save()
 
 def public(m):
-    return {k: v for k, v in m.items() if k in {'id','name','status','message','task_id','created_at','model_url','photo_url','version','source','mode','world_id','world_assets','progress','completed_at'}}
+    return {k: v for k, v in m.items() if k in {'id','name','status','message','task_id','created_at','model_url','photo_url','version','source','mode','world_id','world_assets','progress','completed_at','views','view_source_id','face_count'}}
 
 def clients():
     config = AholoClientConfig(api_key=KEY, region='cn')
@@ -63,6 +63,9 @@ def download_glb(url, mid):
 def work(mid, create=False):
     try:
         with LOCK: mode = STATE['memories'][mid].get('mode','lux3d')
+        if mode == 'fourview':
+            work_fourview(mid, create)
+            return
         if mode == 'world':
             work_world(mid, create)
             return
@@ -72,7 +75,12 @@ def work(mid, create=False):
             # No automatic generation retry. Reserve before any provider request.
             uploaded = asset.upload_file(str(DATA / f'{mid}.jpg'))
             update(mid, status='submitting', message='照片已上传，正在提交 3D 生成任务')
-            task_id = lux.img_to_3d.create(img=uploaded.url, version='G1', face_count=50000, output_format=['zip','glb'], ai_predict_size=False)
+            if mode == 'multiview':
+                source = m['view_source_id']
+                images = [asset.upload_file(str(DATA/source/f'view-{i}.jpg')).url for i in range(4)]
+                task_id = lux.img_to_3d.create(imgs=images, version='G1', face_count=200000, output_format=['zip','glb'], ai_predict_size=False)
+            else:
+                task_id = lux.img_to_3d.create(img=uploaded.url, version='G1', face_count=50000, output_format=['zip','glb'], ai_predict_size=False)
             update(mid, task_id=task_id, status='generating', message='AHOLO 正在生成 3D 记忆，可离开后再回来')
         else:
             task_id = m.get('task_id')
@@ -132,6 +140,29 @@ def start(mid, create=False):
         threading.Thread(target=work, args=(mid, create), daemon=True).start()
 
 
+
+def work_fourview(mid, create=False):
+    asset,lux=clients()
+    with LOCK:m=dict(STATE['memories'][mid])
+    if create:
+        image=asset.upload_file(str(DATA/f'{mid}.jpg'))
+        update(mid,status='submitting',message='正在生成摆件的四个视角')
+        task_id=lux.image_to_four_view.create(img=image.url,prompt='只选择照片左侧戴黄色帽子的白色柯基纸雕摆件，移除右侧的棕色摆件和全部杂乱背景。准确保留左侧摆件的黄色帽子、白色身体、面部表情、短腿、纸片层叠材质与轮廓比例。生成该同一只摆件的四视图，完整主体，干净浅灰背景，视角之间形状和材质保持一致，不增加人物或其他物体。')
+        update(mid,status='generating',task_id=task_id,message='AHOLO 正在生成四视图；这是合成视角，不是真实多角度照片')
+    else:task_id=m['task_id']
+    result=lux.tasks.wait_for(task_id,interval_ms=12000,timeout_ms=1800000)
+    content=(result.get('outputs') or [{}])[0].get('content','[]')
+    urls=json.loads(content)
+    if not isinstance(urls,list) or len(urls)!=4:raise ValueError('Expected four views')
+    folder=DATA/mid;folder.mkdir(exist_ok=True);views=[]
+    for i,url in enumerate(urls):
+        if urlsplit(url).scheme!='https':raise ValueError('Invalid view URL')
+        with urllib.request.urlopen(url,timeout=60) as response:
+            data=response.read(20*1024*1024)
+        with Image.open(io.BytesIO(data)) as image:image.convert('RGB').save(folder/f'view-{i}.jpg',quality=95)
+        views.append(f'/world-assets/{mid}/view-{i}.jpg')
+    update(mid,status='ready',views=views,completed_at=time.time(),message='四视图已生成，待检查后决定是否建模')
+
 def cache_world_file(url, target, max_bytes=300*1024*1024):
     if urlsplit(url).scheme!='https':raise ValueError('Invalid world asset URL')
     target.parent.mkdir(exist_ok=True)
@@ -151,7 +182,7 @@ def work_world(mid, create=False):
     if create:
         image=create_asset_client(config).upload_file(str(DATA/f'{mid}.jpg'))
         update(mid,status='submitting',message='照片已上传，正在提交 World 空间生成')
-        op=world.generations.create(name=m['name'],resources=[{'type':'image','url':image.url}],prompt='根据参考照片生成一个自然真实的室内空间，尽量保留可见墙面、木质餐桌、椅子、地板、门和原有光线。不额外添加人物。')
+        op=world.generations.create(name=m['name'],resources=[{'type':'image','url':image.url}],prompt='根据参考照片生成一个自然真实的室内空间，尽量保持可见墙面、地板、门窗、家具的位置、数量、材质和原有光线。不要添加人物，不要复制已有家具或增加额外门窗。不可见区域保持简洁并与照片连贯。')
         world_id=op['worldId']
         update(mid,world_id=world_id,status='generating',message='World 正在生成记忆空间，可离开后回来')
     else:world_id=m['world_id']
@@ -230,7 +261,7 @@ class Handler(SimpleHTTPRequestHandler):
             parts=path.split('/')
             if len(parts)!=4:return self.json_response({'error':'Not found'},404)
             mid,filename=parts[2:]
-            if len(mid)!=64 or any(c not in '0123456789abcdef' for c in mid) or filename not in ('space.spz','space.ply','panorama.jpg'):
+            if len(mid)!=64 or any(c not in '0123456789abcdef' for c in mid) or filename not in ('space.spz','space.ply','panorama.jpg','view-0.jpg','view-1.jpg','view-2.jpg','view-3.jpg'):
                 return self.json_response({'error':'Not found'},404)
             file=DATA/mid/filename
             if not file.is_file():return self.json_response({'error':'Not found'},404)
@@ -276,8 +307,14 @@ class Handler(SimpleHTTPRequestHandler):
             body=json.loads(self.rfile.read(length))
             data=prepare_image(body['image'])
             mode=body.get('mode','lux3d')
-            if mode not in ('lux3d','world'):raise ValueError('Unknown mode')
-            mid=hashlib.sha256((b'world-v1:' if mode=='world' else b'')+data).hexdigest()
+            if mode not in ('lux3d','world','fourview','multiview'):raise ValueError('Unknown mode')
+            source_id=body.get('view_source_id')
+            if mode=='multiview':
+                with LOCK:source=STATE['memories'].get(source_id)
+                if not source or source.get('mode')!='fourview' or source.get('status')!='ready':raise ValueError('Four views not ready')
+                if len(source.get('views',[]))!=4 or not all((DATA/source_id/f'view-{i}.jpg').is_file() for i in range(4)):raise ValueError('Four view cache missing')
+            prefix={'lux3d':b'','world':b'world-v1:','fourview':b'fourview-isolate-v1:','multiview':f'multiview-g1-v1:{source_id}:'.encode()}[mode]
+            mid=hashlib.sha256(prefix+data).hexdigest()
             with LOCK:
                 if mid in STATE['memories']: return self.json_response(public(STATE['memories'][mid]))
                 if ACTIVE:return self.json_response({'error':'已有记忆正在生成，请等待完成后再提交下一张'},409)
@@ -285,6 +322,8 @@ class Handler(SimpleHTTPRequestHandler):
                 (DATA/f'{mid}.jpg').write_bytes(data)
                 m={'id':mid,'name':str(body.get('name','记忆照片'))[:120],'created_at':time.time(),'status':'uploading','message':'正在将这张照片发送到 AHOLO','photo_url':f'/photos/{mid}.jpg','version':'G1','source':'AHOLO Lux3D'}
                 if mode=='world':m.update(mode='world',source='AHOLO World',version='Spatial Gen')
+                elif mode=='fourview':m.update(mode='fourview',source='AHOLO 四视图',version='Four View')
+                elif mode=='multiview':m.update(mode='multiview',source='AHOLO Lux3D · 四视图建模',version='G1',view_source_id=source_id,face_count=200000)
                 STATE['attempts']+=1;STATE['memories'][mid]=m;save();start(mid,True)
                 return self.json_response(public(m),202)
         except (ValueError,KeyError,TypeError,OSError,Image.DecompressionBombError):return self.json_response({'error':'无法读取照片，请选择 JPG、PNG 或 WebP'},400)
