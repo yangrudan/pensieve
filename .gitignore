@@ -1,0 +1,13 @@
+.venv/
+.runtime/
+__pycache__/
+.env
+*.log
+# Private memories and local evaluation artifacts
+/dist/candidates/
+/.local/
+/SELECTED_MEMORIES.md
+/WORLD_TEST_RESULT.md
+/WORLD_PREPROCESSING.md
+*.local
+.env.*
