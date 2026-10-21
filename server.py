@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from PIL import Image, ImageOps
 import atlas_store
+import world_lab
 from manycore.aholo_sdk_core import AholoClientConfig
 from manycore.aholo_sdk_asset import create_asset_client
 from manycore.aholo_sdk_lux3d import create_lux3d_client
@@ -13,7 +14,7 @@ from manycore.aholo_sdk_world import create_world_client
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / '.runtime'
-LIMIT = 10
+LIMIT = 40  # User-authorized cumulative generation submission limit
 LOCK = threading.RLock()
 ACTIVE: set[str] = set()
 KEY = ''
@@ -33,7 +34,7 @@ def update(mid, **values):
         save()
 
 def public(m):
-    return {k: v for k, v in m.items() if k in {'id','name','status','message','task_id','created_at','model_url','photo_url','version','source','mode','world_id','world_assets','progress','completed_at','views','view_source_id','face_count'}}
+    return {k: v for k, v in m.items() if k in {'id','name','status','message','task_id','created_at','model_url','photo_url','version','source','mode','world_id','world_assets','progress','completed_at','views','view_source_id','face_count','experimental','case','world_method','input_count'}}
 
 def clients():
     config = AholoClientConfig(api_key=KEY, region='cn')
@@ -181,9 +182,22 @@ def work_world(mid, create=False):
     world=create_world_client(config)
     with LOCK:m=dict(STATE['memories'][mid])
     if create:
-        image=create_asset_client(config).upload_file(str(DATA/f'{mid}.jpg'))
-        update(mid,status='submitting',message='照片已上传，正在提交 World 空间生成')
-        op=world.generations.create(name=m['name'],resources=[{'type':'image','url':image.url}],prompt='根据参考照片生成一个自然真实的室内空间，尽量保持可见墙面、地板、门窗、家具的位置、数量、材质和原有光线。不要添加人物，不要复制已有家具或增加额外门窗。不可见区域保持简洁并与照片连贯。')
+        asset=create_asset_client(config)
+        if m.get('experimental'):
+            manifest,files,expected_id=world_lab.load_case(ROOT,m['case'])
+            if expected_id!=mid:raise ValueError('Input changed after reservation')
+            resources=[]
+            for i,file in enumerate(files):
+                uploaded=asset.upload_file(str(file));resources.append({'type':'image','url':uploaded.url})
+                update(mid,message=f'已上传 {i+1} / {len(files)} 个视角')
+            update(mid,status='submitting',message='视角已上传，正在提交 World 实验')
+            if manifest['method']=='reconstruction':
+                op=world.reconstructions.create(name=m['name'],resources=resources,task_quality=manifest.get('task_quality','normal'),scene='space',use_mask=False)
+            else:op=world.generations.create(name=m['name'],resources=resources,prompt=manifest.get('prompt','一个真实尺度的魔法石大厅，无人物'))
+        else:
+            image=asset.upload_file(str(DATA/f'{mid}.jpg'))
+            update(mid,status='submitting',message='照片已上传，正在提交 World 空间生成')
+            op=world.generations.create(name=m['name'],resources=[{'type':'image','url':image.url}],prompt='根据参考照片生成一个自然真实的室内空间，尽量保持可见墙面、地板、门窗、家具的位置、数量、材质和原有光线。不要添加人物，不要复制已有家具或增加额外门窗。不可见区域保持简洁并与照片连贯。')
         world_id=op['worldId']
         update(mid,world_id=world_id,status='generating',message='World 正在生成记忆空间，可离开后回来')
     else:world_id=m['world_id']
@@ -199,6 +213,8 @@ def work_world(mid, create=False):
             time.sleep(min(failures*12,45));continue
         status=detail.get('status')
         if status in ('FAILED','CANCELED','TIMEOUT','REJECTED'):
+            folder=DATA/mid;folder.mkdir(exist_ok=True)
+            (folder/'provider-failure.json').write_text(json.dumps(detail,ensure_ascii=False,indent=2))
             update(mid,status='failed',message=f'World 任务结束：{status}；没有自动重新生成')
             return
         if status=='SUCCEEDED':
@@ -228,7 +244,8 @@ def work_world(mid, create=False):
                 return
             update(mid,status='ready',progress=1,completed_at=time.time(),world_assets=local,message='World 记忆空间已就绪')
             return
-        update(mid,status='generating',progress=detail.get('progress'),message=f'World 正在生成记忆空间（{status}）')
+        action='重建' if m.get('world_method')=='reconstruction' else '生成'
+        update(mid,status='generating',progress=detail.get('progress'),message=f'World 正在{action}记忆空间（{status}）')
         time.sleep(12)
     update(mid,status='paused',message='World 仍未完成，可稍后继续查询同一任务')
 
@@ -256,10 +273,20 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/session':
             with LOCK: return self.json_response({'configured':bool(KEY),'token':TOKEN,'attempts':STATE['attempts'],'limit':LIMIT})
+        if path == '/api/experiments':
+            with LOCK:return self.json_response({'items':[public(m) for m in STATE['memories'].values() if m.get('experimental')],'attempts':STATE['attempts'],'limit':LIMIT})
+        if path.startswith('/lab-inputs/'):
+            parts=path.split('/')
+            try:
+                if len(parts)!=4:raise ValueError()
+                file=world_lab.input_file(ROOT,parts[2],parts[3])
+                if file is None:raise ValueError()
+                content=file.read_bytes();self.send_response(200);self.send_header('Content-Type','image/png' if file.suffix=='.png' else 'image/webp' if file.suffix=='.webp' else 'image/jpeg');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
+            except (ValueError,OSError,TypeError,KeyError):return self.json_response({'error':'Not found'},404)
         if path == '/api/atlas':
             with LOCK: return self.json_response(atlas_store.snapshot(STATE))
         if path == '/api/memories':
-            with LOCK: return self.json_response({'items':[public(m) for m in STATE['memories'].values()],'attempts':STATE['attempts'],'limit':LIMIT})
+            with LOCK: return self.json_response({'items':[public(m) for m in STATE['memories'].values() if not m.get('experimental')],'attempts':STATE['attempts'],'limit':LIMIT})
         if path.startswith('/world-assets/'):
             parts=path.split('/')
             if len(parts)!=4:return self.json_response({'error':'Not found'},404)
@@ -305,6 +332,20 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.json_response({'error':str(exc) if isinstance(exc,ValueError) else '无法保存，请检查输入'},400)
             except OSError:return self.json_response({'error':'本地保存失败，请重试'},500)
         if not KEY: return self.json_response({'error':'服务端尚未配置 AHOLO_KEY'},503)
+        if path == '/api/experiments':
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<4096:raise ValueError('实验请求大小超限')
+                body=json.loads(self.rfile.read(length));case=body.get('case')
+                manifest,files,mid=world_lab.load_case(ROOT,case)
+                with LOCK:
+                    if mid in STATE['memories']:return self.json_response(public(STATE['memories'][mid]))
+                    if any(not STATE['memories'].get(i,{}).get('experimental') for i in ACTIVE) or len(ACTIVE)>=2:return self.json_response({'error':'请等待当前任务完成'},409)
+                    if STATE['attempts']>=LIMIT:return self.json_response({'error':f'已达到本轮 {LIMIT} 次生成上限'},429)
+                    m={'id':mid,'case':case,'experimental':True,'mode':'world','world_method':manifest['method'],'input_count':len(files),'name':manifest.get('name',case),'source':'AHOLO World','version':'Reconstruction' if manifest['method']=='reconstruction' else 'Spatial Gen','created_at':time.time(),'status':'uploading','message':'正在上传实验视角','photo_url':f'/lab-inputs/{case}/{files[0].name}'}
+                    STATE['attempts']+=1;STATE['memories'][mid]=m;save();start(mid,True)
+                return self.json_response(public(m),202)
+            except (ValueError,KeyError,TypeError,OSError,AttributeError,Image.DecompressionBombError):return self.json_response({'error':'实验图片集不完整或无效，未提交生成'},400)
         if path.startswith('/api/resume/'):
             mid=path.rsplit('/',1)[-1]
             with LOCK:
@@ -334,7 +375,7 @@ class Handler(SimpleHTTPRequestHandler):
                     atlas_store.migrate_archive(STATE,body.get('archive_id'),mid);save()
                     return self.json_response(public(STATE['memories'][mid]))
                 if ACTIVE:return self.json_response({'error':'已有记忆正在生成，请等待完成后再提交下一张'},409)
-                if STATE['attempts']>=LIMIT:return self.json_response({'error':'已达到本轮 10 次生成上限'},429)
+                if STATE['attempts']>=LIMIT:return self.json_response({'error':f'已达到本轮 {LIMIT} 次生成上限'},429)
                 (DATA/f'{mid}.jpg').write_bytes(data)
                 m={'id':mid,'name':str(body.get('name','记忆照片'))[:120],'created_at':time.time(),'status':'uploading','message':'正在将这张照片发送到 AHOLO','photo_url':f'/photos/{mid}.jpg','version':'G1','source':'AHOLO Lux3D'}
                 if mode=='world':m.update(mode='world',source='AHOLO World',version='Spatial Gen')

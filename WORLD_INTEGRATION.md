@@ -52,7 +52,7 @@ World 状态为 PENDING / PREPROCESSING / RUNNING / SUCCEEDED / FAILED / CANCELE
 
 ## 额度
 
-与 Lux3D 共用同一个 10 次总预算、单任务锁、任务持久化和不自动重试创建的规则。缓存键必须包含模式与参数（例如 world-v1 + prompt + image hash），避免照片相同时错用已有 GLB。接入 World 不代表已验证单次费用，实际费用以平台为准。
+与 Lux3D 共用同一个 40 次累计提交上限（原上限 10 次，经用户授权提升）、单任务锁、任务持久化和不自动重试创建的规则。缓存键必须包含模式与参数（例如 world-v1 + prompt + image hash），避免照片相同时错用已有 GLB。接入 World 不代表已验证单次费用，实际费用以平台为准。
 
 ## 边界
 

@@ -40,11 +40,11 @@ python3 -m venv .venv
 - `v0.3.0`：新增第二章星石之境、地点管理、跨章节记忆标签与本地原片归档。
 - 本地 Git 管理；私人照片、生成模型、实验记录和密钥不进入仓库。
 - 场景背景由内置图像生成工具制作，已转为本地 WebP；完整提示词在 [memory-chamber-prompt.txt](dist/assets/memory-chamber-prompt.txt)。实时水面、银丝、烛光及符文由 Three.js 渲染。
-- [AHOLO 探索结果与边界](AHOLO_EXPLORATION.md)：本轮 7 / 10 次，含去人物空间和四视图物件实测。
+- [AHOLO 探索结果与边界](AHOLO_EXPLORATION.md)：记录早期 7 / 10 次提交，含去人物空间和四视图物件实测。
 
 ## 额度与数据
 
-- 本轮最多 10 次提交预留，状态保存在 `.runtime/state.json`。不要删除该文件来重置计数。
+- 本轮累计最多 40 次提交预留（用户已将上限由 10 次提升至 40 次），状态保存在 `.runtime/state.json`。不要删除该文件来重置计数。
 - 同样照片规范化后按 SHA-256 去重；重复触摸和查看不重新生成。
 - 单任务执行，不自动重试生成 POST。提交结果不明时停止并提示控制台核对。
 - 上传失败等情况也保守占用一次本地预留，因此界面次数是提交尝试上限，不是平台实际账单。
@@ -65,8 +65,31 @@ node --check dist/memory3d.js
 
 ## World 空间验证
 
-官方 World SDK 1.4.0 已接入。服务端 `/api/memories` 支持 `mode: "world"`，与 Lux3D 共用 10 次预算；同图在不同模式下独立缓存。网页提供「物件 / 空间」手动选择，不会自动判断照片类型。
+官方 World SDK 1.4.0 已接入。服务端 `/api/memories` 支持 `mode: "world"`，与 Lux3D 共用 40 次预算；同图在不同模式下独立缓存。网页提供「物件 / 空间」手动选择，不会自动判断照片类型。
 
 World 验证页面：http://localhost:4174/world/ ，支持实际 3DGS 环顾/微移、生成全景图、原照片对比。World 记忆在冥想盆中直接嵌入空间查看器。微移没有角色/墙体碰撞，不能作为真实行走结果。
 
 World 数据保存在 `.runtime/<memory-id>/`，包括空间 SPZ 或 PLY、全景 JPG（若返回）、provider-result.json。官方 Viewer 1.11.0 存在 `dist/vendor/aholo/`。
+
+## 魔法石之境 · World 实验
+
+实验前版本为 `20ea00d` / `v0.3.0`，检查点 `checkpoint-before-world-experiments`。实验在 `feat/aholo-stone-world` 分支，第一章的场景与仪式没有替换。
+
+实验页：http://localhost:4174/atlas/lab/ 。实验包括一张 AI 概念图的 World generation、一个固定三维大厅的 24 个重叠相机视角的 World reconstruction，以及修正纹理与焦距信息后的第二轮重建。两组不是只改变图片数量的严格对照；合成视角也不是真实地点拍摄。
+
+原始输入准备命令（不调用 AHOLO）：
+
+```sh
+.venv/bin/python scripts/prepare_world_reference.py
+# 需另行安装 Playwright 及其 Chromium 浏览器，仅用于本地采集
+.venv/bin/python scripts/capture_world_views.py
+.venv/bin/python scripts/capture_world_views.py --variant v2
+```
+
+实验创建端点 `POST /api/experiments` 接收本机预先准备的 case 名称，读取 `.local/world-lab/<case>/manifest.json`。提交前校验图片数量、文件内容和唯一性；与记忆生成共用 40 次累计上限。同一输入哈希复用任务，不自动重试创建。最多并行两个实验，个人记忆任务仍受原有单任务规则约束。
+
+实验不加入 `/api/memories` 的个人记忆列表，也不修改地点标签。结果通过 `/world/?id=<id>&experiment=1` 查看；查看与查询不创建新任务。
+
+生成图像及完整提示词：[stone-world-prompts.md](dist/assets/stone-world-prompts.md)。私有运行状态、24 张输入图、相机位姿和平台返回仍不提交 Git。
+
+实际返回与质量评估：[WORLD_EXPERIMENTS.md](WORLD_EXPERIMENTS.md)。

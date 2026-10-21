@@ -18,7 +18,7 @@ class GenerationGuardTests(unittest.TestCase):
         self.http.shutdown();self.http.server_close();patch.stopall()
         server.DATA,server.STATE,server.KEY,server.PORT=self.old;server.ACTIVE.clear();self.temp.cleanup()
     def post(self,color=0,token=True,mode="lux3d",**extra):
-        im=Image.new('RGB',(16,16),(color*20,0,0));out=io.BytesIO();im.save(out,format='PNG')
+        im=Image.new('RGB',(16,16),(color*20%256,color*7%256,0));out=io.BytesIO();im.save(out,format='PNG')
         body=json.dumps({'image':base64.b64encode(out.getvalue()).decode(),'name':'test','mode':mode,**extra}).encode()
         headers={'Content-Type':'application/json'}
         if token:headers['X-Pensieve-Token']=server.TOKEN
@@ -31,9 +31,9 @@ class GenerationGuardTests(unittest.TestCase):
         server.STATE=json.loads((server.DATA/'state.json').read_text())
         status,b=self.post();self.assertEqual(status,200);self.assertEqual(a['id'],b['id'])
         self.assertEqual(server.STATE['attempts'],1);self.start.assert_called_once()
-    def test_budget_never_exceeds_ten(self):
-        for i in range(10):self.assertEqual(self.post(i)[0],202)
-        self.assertEqual(self.post(10)[0],429);self.assertEqual(server.STATE['attempts'],10);self.assertEqual(self.start.call_count,10)
+    def test_budget_never_exceeds_authorized_limit(self):
+        for i in range(server.LIMIT):self.assertEqual(self.post(i)[0],202)
+        self.assertEqual(self.post(server.LIMIT)[0],429);self.assertEqual(server.STATE['attempts'],server.LIMIT);self.assertEqual(self.start.call_count,server.LIMIT)
     def test_concurrent_duplicates_reserve_once(self):
         results=[]
         threads=[threading.Thread(target=lambda:results.append(self.post())) for _ in range(4)]
@@ -52,7 +52,7 @@ class GenerationGuardTests(unittest.TestCase):
         self.assertNotEqual(a['id'],b['id']);self.assertEqual(b['mode'],'world')
         status,c=self.post(mode='world');self.assertEqual(status,200)
         self.assertEqual(c['id'],b['id']);self.assertEqual(server.STATE['attempts'],2)
-        server.STATE['attempts']=10
+        server.STATE['attempts']=server.LIMIT
         self.assertEqual(self.post(1,mode='world')[0],429)
     def test_unknown_generation_mode_cannot_spend(self):
         self.assertEqual(self.post(mode='anything')[0],400);self.assertEqual(server.STATE['attempts'],0)
@@ -60,7 +60,7 @@ class GenerationGuardTests(unittest.TestCase):
         a=self.post(mode='fourview');b=self.post(mode='fourview')
         self.assertEqual((a[0],b[0]),(202,200));self.assertEqual(a[1]['id'],b[1]['id'])
         self.assertEqual(server.STATE['attempts'],1)
-        server.STATE['attempts']=10
+        server.STATE['attempts']=server.LIMIT
         self.assertEqual(self.post(1,mode='fourview')[0],429)
     def test_multiview_requires_complete_local_views_before_spending(self):
         self.assertEqual(self.post(mode='multiview',view_source_id='missing')[0],400)
@@ -75,7 +75,7 @@ class GenerationGuardTests(unittest.TestCase):
         self.assertEqual(status,202);self.assertEqual(result['face_count'],200000)
         self.assertEqual(self.post(mode='multiview',view_source_id=mid)[0],200)
         self.assertEqual(server.STATE['attempts'],2)
-        server.STATE['attempts']=10
+        server.STATE['attempts']=server.LIMIT
         self.assertEqual(self.post(1,mode='multiview',view_source_id=mid)[0],429)
     def test_host_validation(self):
         req=urllib.request.Request(self.root+'/api/session',headers={'Host':'untrusted.example'})
@@ -87,10 +87,10 @@ class AtlasTests(unittest.TestCase):
     setUp=GenerationGuardTests.setUp
     tearDown=GenerationGuardTests.tearDown
     post=GenerationGuardTests.post
-    def atlas_post(self,body,token=True):
+    def atlas_post(self,body,token=True,path='/api/atlas'):
         headers={'Content-Type':'application/json'}
         if token:headers['X-Pensieve-Token']=server.TOKEN
-        req=urllib.request.Request(self.root+'/api/atlas',data=json.dumps(body).encode(),headers=headers)
+        req=urllib.request.Request(self.root+path,data=json.dumps(body).encode(),headers=headers)
         try:
             with urllib.request.urlopen(req) as r:return r.status,json.load(r)
         except urllib.error.HTTPError as e:return e.code,json.load(e)
@@ -118,5 +118,39 @@ class AtlasTests(unittest.TestCase):
         self.assertEqual(self.atlas_post(body)[1]['memory_id'],archive);self.assertEqual(len(server.STATE['archives']),1)
         status,m=self.post(archive_id=archive);self.assertEqual(status,202)
         self.assertEqual(server.STATE['memory_places'][m['id']],['home']);self.assertNotIn(archive,server.STATE['archives'])
+
+class WorldExperimentTests(unittest.TestCase):
+    setUp=GenerationGuardTests.setUp
+    tearDown=GenerationGuardTests.tearDown
+    atlas_post=AtlasTests.atlas_post
+    def make_case(self,name='test-case',count=24,method='reconstruction'):
+        patch.object(server,'ROOT',server.DATA).start()
+        folder=server.DATA/'.local/world-lab'/name;folder.mkdir(parents=True,exist_ok=True)
+        for i in range(count):Image.new('RGB',(16,16),(i*9%256,i*7%256,10)).save(folder/f'{i}.jpg')
+        (folder/'manifest.json').write_text(json.dumps({'name':name,'method':method,'images':[f'{i}.jpg' for i in range(count)]}))
+        return name
+    def submit(self,case,token=True):return self.atlas_post({'case':case},token=token,path='/api/experiments')
+    def test_reconstruction_reserves_once_and_stays_out_of_personal_memories(self):
+        case=self.make_case();status,a=self.submit(case);self.assertEqual(status,202)
+        status,b=self.submit(case);self.assertEqual(status,200);self.assertEqual(a['id'],b['id'])
+        self.assertEqual(a['input_count'],24);self.assertEqual(server.STATE['attempts'],1)
+        self.start.assert_called_once()
+        with urllib.request.urlopen(self.root+'/lab-inputs/test-case/0.jpg') as r:self.assertEqual(r.headers['Content-Type'],'image/jpeg')
+        with self.assertRaises(urllib.error.HTTPError) as err:urllib.request.urlopen(self.root+'/lab-inputs/test-case/manifest.json')
+        self.assertEqual(err.exception.code,404)
+        with urllib.request.urlopen(self.root+'/api/memories') as r:self.assertEqual(json.load(r)['items'],[])
+        with urllib.request.urlopen(self.root+'/api/experiments') as r:self.assertEqual(len(json.load(r)['items']),1)
+    def test_invalid_sets_and_forged_requests_do_not_reserve(self):
+        case=self.make_case(count=19);self.assertEqual(self.submit(case)[0],400)
+        self.assertEqual(self.submit('../escape')[0],400)
+        case=self.make_case(name='valid');self.assertEqual(self.submit(case,token=False)[0],403)
+        (server.DATA/'.local/world-lab/valid/1.jpg').write_bytes((server.DATA/'.local/world-lab/valid/0.jpg').read_bytes())
+        self.assertEqual(self.submit(case)[0],400)
+        self.assertEqual(server.STATE['attempts'],0);self.start.assert_not_called()
+    def test_experiment_uses_shared_authorized_limit_and_concurrency_guard(self):
+        case=self.make_case();server.STATE['attempts']=server.LIMIT
+        self.assertEqual(self.submit(case)[0],429);self.assertEqual(server.STATE['attempts'],server.LIMIT)
+        server.STATE['attempts']=0;server.ACTIVE.add('personal-job')
+        self.assertEqual(self.submit(case)[0],409);self.assertEqual(server.STATE['attempts'],0)
 
 if __name__=='__main__':unittest.main()
