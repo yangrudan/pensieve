@@ -1,9 +1,19 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
-import { createCrystalGeometry,createCrystalEnvironment,createCrystal } from '../hybrid/crystal.js?v=20261022-2';
+import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES } from '../hybrid/crystal.js?v=20261022-4';
+import { watchGeneratedCrystal } from './generated.js?v=20261022-2';
 
 function start(){
  const canvas=document.querySelector('#crystal-scene'),stage=canvas.parentElement,status=document.querySelector('#preview-status');
+ const aholoMode=new URLSearchParams(location.search).get('source')==='aholo';
+ let releaseGenerated=()=>{};
+ if(aholoMode){
+  document.querySelector('h1').textContent='AHOLO 首颗样品';
+  document.querySelector('#shape-description').textContent='先看真实生成的模型，再比较材质。其余四颗暂不生成。';
+  document.querySelector('.swatches').hidden=true;document.querySelector('#material-tools').hidden=false;
+  document.querySelector('.note').textContent='造型来源：AHOLO Lux3D。正在读取已有任务。';
+  document.querySelector('#color-name').textContent='首颗翡翠水晶';
+ }
  let renderer;
  try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}
  catch{status.textContent='此设备暂不支持三维预览，请尝试其他浏览器。';document.querySelector('#reset').disabled=true;return;}
@@ -15,7 +25,7 @@ function start(){
  scene.add(new THREE.HemisphereLight(0xd9edf0,0x233331,.8));
  const key=new THREE.DirectionalLight(0xffe9c8,2.0);key.position.set(2,5,4);scene.add(key);
  const fill=new THREE.DirectionalLight(0x99d7ee,1.3);fill.position.set(-3,3,-2);scene.add(fill);
- const geometry=createCrystalGeometry();
+ const geometries=Object.fromEntries(CRYSTAL_SHAPES.map(shape=>[shape,createCrystalGeometry(shape)]));
  const stone=new THREE.MeshStandardMaterial({color:0x788782,roughness:.8});
  const brass=new THREE.MeshStandardMaterial({color:0x9e8151,metalness:.85,roughness:.23,envMapIntensity:.6});
  function part(g,m,y){const mesh=new THREE.Mesh(g,m);mesh.position.y=y;scene.add(mesh);return mesh;}
@@ -29,18 +39,18 @@ function start(){
  const swatches=document.querySelector('.swatches');
  function select(index){
   if(crystal){scene.remove(crystal);crystal.traverse(node=>node.material?.dispose());}
-  crystal=createCrystal(colors[index][1],environment.texture,geometry);crystal.position.y=1.02;crystal.rotation.y=.18;scene.add(crystal);
-  document.querySelector('#color-name').textContent=colors[index][0];canvas.dataset.color=colors[index][1];
+  const shape=CRYSTAL_SHAPES[index];crystal=createCrystal(colors[index][1],environment.texture,geometries[shape],shape);canvas.dataset.shape=shape;canvas.dataset.source='procedural-mesh';crystal.position.y=1.02;crystal.rotation.y=.18;scene.add(crystal);
+  document.querySelector('#color-name').textContent=colors[index][0]+' · '+['六棱长晶','三峰晶簇','八角切钻','蔷薇心晶','冰蓝双尖'][index];canvas.dataset.color=colors[index][1];
   [...swatches.children].forEach((button,i)=>button.setAttribute('aria-pressed',String(i===index)));dirty=true;
  }
  colors.forEach(([name,color],index)=>{const button=document.createElement('button');button.style.setProperty('--color',color);button.setAttribute('aria-label',name);button.title=name;button.onclick=()=>select(index);swatches.append(button);});
  function reset(){camera.position.set(-2.5,3.0,5.8);controls.target.set(0,1.65,0);controls.update();dirty=true;}
  document.querySelector('#reset').onclick=reset;controls.addEventListener('change',()=>dirty=true);
  function resize(){const {width,height}=stage.getBoundingClientRect();camera.aspect=width/height;camera.fov=width<500?44:38;camera.updateProjectionMatrix();renderer.setPixelRatio(Math.min(devicePixelRatio,1.5,Math.sqrt(800000/(width*height))));renderer.setSize(width,height,false);dirty=true;}
- const observer=new ResizeObserver(resize);observer.observe(stage);select(0);resize();reset();
- function frame(){frameId=requestAnimationFrame(frame);if(disposed||document.hidden)return;controls.update();if(!dirty)return;dirty=false;renderer.render(scene,camera);canvas.dataset.ready='true';canvas.dataset.frames=String(Number(canvas.dataset.frames||0)+1);status.textContent='拖动旋转 · 滚轮或双指缩放';}
+ const observer=new ResizeObserver(resize);observer.observe(stage);if(aholoMode)releaseGenerated=watchGeneratedCrystal({scene,environment:environment.texture,canvas,changed:()=>dirty=true,status});else select(0);resize();reset();
+ function frame(){frameId=requestAnimationFrame(frame);if(disposed||document.hidden)return;controls.update();if(!dirty)return;dirty=false;renderer.render(scene,camera);canvas.dataset.ready='true';canvas.dataset.frames=String(Number(canvas.dataset.frames||0)+1);if(!aholoMode)status.textContent='拖动旋转 · 滚轮或双指缩放';}
  frame();
- addEventListener('pagehide',()=>{disposed=true;cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();environment.dispose();const geometries=new Set(),materials=new Set();scene.traverse(node=>{if(node.geometry)geometries.add(node.geometry);if(node.material)materials.add(node.material);});geometries.forEach(g=>g.dispose());materials.forEach(m=>{m.map?.dispose();m.dispose();});renderer.dispose();});
+ addEventListener('pagehide',()=>{disposed=true;cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();releaseGenerated();environment.dispose();const usedGeometries=new Set(Object.values(geometries)),materials=new Set();scene.traverse(node=>{if(node.geometry)usedGeometries.add(node.geometry);if(node.material)materials.add(node.material);});usedGeometries.forEach(g=>g.dispose());materials.forEach(m=>{m.map?.dispose();m.dispose();});renderer.dispose();});
  addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 }
 start();

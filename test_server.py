@@ -1,7 +1,7 @@
 """Quota/idempotency tests. No network calls to AHOLO."""
 import base64, io, json, tempfile, threading, unittest, urllib.request, urllib.error
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from PIL import Image
 import server
 
@@ -152,5 +152,48 @@ class WorldExperimentTests(unittest.TestCase):
         self.assertEqual(self.submit(case)[0],429);self.assertEqual(server.STATE['attempts'],server.LIMIT)
         server.STATE['attempts']=0;server.ACTIVE.add('personal-job')
         self.assertEqual(self.submit(case)[0],409);self.assertEqual(server.STATE['attempts'],0)
+
+class CrystalExperimentTests(unittest.TestCase):
+    setUp=GenerationGuardTests.setUp
+    tearDown=GenerationGuardTests.tearDown
+    def submit(self,case='emerald-quartz-lux-v1',token=True):
+        headers={'Content-Type':'application/json'}
+        if token:headers['X-Pensieve-Token']=server.TOKEN
+        request=urllib.request.Request(self.root+'/api/crystal-experiments',data=json.dumps({'case':case}).encode(),headers=headers)
+        try:
+            with urllib.request.urlopen(request) as response:return response.status,json.load(response)
+        except urllib.error.HTTPError as exc:return exc.code,json.load(exc)
+    def test_first_crystal_reserves_once_and_deduplicates(self):
+        a=self.submit();b=self.submit()
+        self.assertEqual((a[0],b[0]),(202,200));self.assertEqual(a[1]['id'],b[1]['id'])
+        self.assertEqual(server.STATE['attempts'],1);self.start.assert_called_once()
+        model=server.STATE['memories'][a[1]['id']]
+        self.assertEqual(model['generation_method'],'text_to_3d');self.assertTrue(model['experimental'])
+    def test_other_crystals_are_held_for_quality_review(self):
+        self.assertEqual(self.submit('purple-cluster')[0],400)
+        self.assertEqual(server.STATE['attempts'],0);self.start.assert_not_called()
+    def test_authentication_budget_and_busy_guard(self):
+        self.assertEqual(self.submit(token=False)[0],403)
+        server.STATE['attempts']=server.LIMIT
+        self.assertEqual(self.submit()[0],429)
+        server.STATE['attempts']=0;server.ACTIVE.add('busy')
+        self.assertEqual(self.submit()[0],409);self.assertEqual(server.STATE['attempts'],0)
+    def test_worker_uses_text_generation_once_and_resume_only_queries(self):
+        _,entry=self.submit();mid=entry['id'];asset,lux=Mock(),Mock()
+        lux.text_to_3d.create.return_value=12345
+        lux.tasks.retrieve.return_value={'status':3,'outputs':[{'content':'https://example.invalid/crystal.glb'}]}
+        with patch.object(server,'clients',return_value=(asset,lux)),patch.object(server,'download_glb'):
+            server.work(mid,True)
+            self.assertEqual(server.STATE['memories'][mid]['status'],'ready')
+            server.work(mid,False)
+        lux.text_to_3d.create.assert_called_once();lux.img_to_3d.create.assert_not_called();asset.upload_file.assert_not_called()
+        self.assertEqual(server.STATE['attempts'],1)
+    def test_lost_text_create_receipt_is_not_retried(self):
+        _,entry=self.submit();mid=entry['id'];asset,lux=Mock(),Mock();lux.text_to_3d.create.side_effect=RuntimeError('connection lost')
+        with patch.object(server,'clients',return_value=(asset,lux)):
+            server.work(mid,True)
+        self.assertEqual(server.STATE['memories'][mid]['status'],'uncertain')
+        self.assertEqual(self.submit()[0],200);self.assertEqual(server.STATE['attempts'],1)
+        lux.text_to_3d.create.assert_called_once()
 
 if __name__=='__main__':unittest.main()

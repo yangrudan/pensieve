@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from PIL import Image, ImageOps
 import atlas_store
 import world_lab
+import crystal_lab
 from manycore.aholo_sdk_core import AholoClientConfig
 from manycore.aholo_sdk_asset import create_asset_client
 from manycore.aholo_sdk_lux3d import create_lux3d_client
@@ -75,13 +76,17 @@ def work(mid, create=False):
         with LOCK: m = dict(STATE['memories'][mid])
         if create:
             # No automatic generation retry. Reserve before any provider request.
-            uploaded = asset.upload_file(str(DATA / f'{mid}.jpg'))
-            update(mid, status='submitting', message='照片已上传，正在提交 3D 生成任务')
-            if mode == 'multiview':
+            if m.get('generation_method')=='text_to_3d':
+                update(mid,status='submitting',message='正在向 AHOLO Lux3D 提交水晶造型生成')
+                task_id=lux.text_to_3d.create(prompt=m['prompt'],version='G1',face_count=50000,output_format=['zip','glb'],ai_predict_size=False)
+            elif mode == 'multiview':
+                update(mid,status='submitting',message='正在提交四视图 3D 生成任务')
                 source = m['view_source_id']
                 images = [asset.upload_file(str(DATA/source/f'view-{i}.jpg')).url for i in range(4)]
                 task_id = lux.img_to_3d.create(imgs=images, version='G1', face_count=200000, output_format=['zip','glb'], ai_predict_size=False)
             else:
+                uploaded = asset.upload_file(str(DATA / f'{mid}.jpg'))
+                update(mid, status='submitting', message='照片已上传，正在提交 3D 生成任务')
                 task_id = lux.img_to_3d.create(img=uploaded.url, version='G1', face_count=50000, output_format=['zip','glb'], ai_predict_size=False)
             update(mid, task_id=task_id, status='generating', message='AHOLO 正在生成 3D 记忆，可离开后再回来')
         else:
@@ -332,6 +337,19 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.json_response({'error':str(exc) if isinstance(exc,ValueError) else '无法保存，请检查输入'},400)
             except OSError:return self.json_response({'error':'本地保存失败，请重试'},500)
         if not KEY: return self.json_response({'error':'服务端尚未配置 AHOLO_KEY'},503)
+        if path == '/api/crystal-experiments':
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<1024:raise ValueError('实验请求大小无效')
+                body=json.loads(self.rfile.read(length));mid,settings=crystal_lab.prototype(body.get('case'))
+                with LOCK:
+                    if mid in STATE['memories']:return self.json_response(public(STATE['memories'][mid]))
+                    if ACTIVE:return self.json_response({'error':'请等待当前任务完成'},409)
+                    if STATE['attempts']>=LIMIT:return self.json_response({'error':f'已达到本轮 {LIMIT} 次生成上限'},429)
+                    m={'id':mid,'experimental':True,'case':settings['case'],'mode':'lux3d','generation_method':'text_to_3d','prompt':settings['prompt'],'name':'翡翠水晶 · Lux3D 首颗样品','source':'AHOLO Lux3D · 文生 3D','version':'G1','face_count':settings['face_count'],'created_at':time.time(),'status':'submitting','message':'已预留一次生成额度，准备提交水晶样品'}
+                    STATE['attempts']+=1;STATE['memories'][mid]=m;save();start(mid,True)
+                return self.json_response(public(m),202)
+            except (ValueError,KeyError,TypeError):return self.json_response({'error':'水晶实验请求无效，未提交生成'},400)
         if path == '/api/experiments':
             try:
                 length=int(self.headers.get('Content-Length','0'))
