@@ -1,7 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
 import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES } from '../hybrid/crystal.js?v=20261022-4';
-import { watchGeneratedCrystal } from './generated.js?v=20261022-2';
+import { watchGeneratedCrystal } from './generated.js?v=20261022-4';
 
 function start(){
  const canvas=document.querySelector('#crystal-scene'),stage=canvas.parentElement,status=document.querySelector('#preview-status');
@@ -10,7 +10,7 @@ function start(){
  if(aholoMode){
   document.querySelector('h1').textContent='AHOLO 首颗样品';
   document.querySelector('#shape-description').textContent='先看真实生成的模型，再比较材质。其余四颗暂不生成。';
-  document.querySelector('.swatches').hidden=true;document.querySelector('#material-tools').hidden=false;
+  document.querySelector('.swatches').hidden=true;document.querySelector('#material-tools').hidden=false;document.querySelector('#clarity-tools').hidden=false;
   document.querySelector('.note').textContent='造型来源：AHOLO Lux3D。正在读取已有任务。';
   document.querySelector('#color-name').textContent='首颗翡翠水晶';
  }

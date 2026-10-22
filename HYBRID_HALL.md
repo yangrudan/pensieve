@@ -43,6 +43,6 @@
 
 `/atlas/crystal-lab/` 和大厅说明明确标注：这些造型是程序构建的本地 Mesh，不是 AHOLO 生成。AHOLO 缓存全景仍用于大厅光景。
 
-另开 `/atlas/crystal-lab/?source=aholo`，只读展示 `emerald-quartz-lux-v1` 首颗 Lux3D 文生 3D 样品。它使用真实 API 返回的 GLB；“API 原材质”保留返回材质，“光泽展示材质”只替换浏览器显示材质，不改写缓存原文件，也不生成新的网格。样品生成中不展示程序水晶冒充返回结果。
+另开 `/atlas/crystal-lab/?source=aholo`，只读展示 `emerald-quartz-lux-v1` 首颗 Lux3D 文生 3D 样品。它使用真实 API 返回的 GLB；“API 原材质”保留返回材质，“通透展示材质”只替换浏览器显示材质，不改写缓存原文件，也不生成新的网格。默认通透展示强度 90%，有滑杆及可开关的透光参照背景；详细请求和检查见 `CRYSTAL_API_TRIAL.md`。样品生成中不展示程序水晶冒充返回结果。
 
 后端 `/api/crystal-experiments` 复用服务端持有的密钥和累计 40 次预算；固定提示词和配置产生确定的缓存 ID，同一样品重复提交只返回已存记录。新入口仅开放第一颗，其余四颗等待质量检查；任务提交回执不明时不自动重提。打开任何预览页面都不会创建生成任务。API 提示词和配置见 `crystal_lab.py`。

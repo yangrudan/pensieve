@@ -1,0 +1,14 @@
+{
+  "method": "POST",
+  "url": "https://api.aholo3d.cn/lux3d/v1/generate/text-to-3d/task/create",
+  "body": {
+    "prompt": "A single exquisite emerald green magical quartz crystal, isolated standalone object.\nOne upright six-sided crystal prism with a slightly asymmetric pointed crown, crisp polished facets,\nfine beveled edges, transparent emerald green gemstone appearance, subtle natural internal striations.\nThe main body is tall and slender with a clear hexagonal cross section and a narrow lower termination.\nSolid coherent watertight gemstone geometry, refined natural crystal proportions, physically based material.\nOnly the gemstone: no pedestal, no stand, no floor, no room, no surrounding rocks, no companion crystals,\nno floating particles, no light rays, no letters or symbols. Product-quality 3D asset.",
+    "version": "G1",
+    "faceCount": 50000,
+    "outputFormat": [
+      "zip",
+      "glb"
+    ],
+    "aiPredictSize": false
+  }
+}
