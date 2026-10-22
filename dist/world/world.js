@@ -1,6 +1,7 @@
 import {createViewer,setViewerConfig,PerspectiveCamera,BackgroundMode,Vector3,Color,SplatLoader,SplatUtils} from '../vendor/aholo/index.js';
 import * as THREE from '../vendor/three.module.js';
 import {bestView,renderScale} from './view-presets.js';
+import {reviewFor} from '../atlas/lab/quality.js';
 const $=s=>document.querySelector(s),params=new URLSearchParams(location.search);
 const experiments=params.get('experiment')==='1',requested=params.get('id');
 if(params.get('embed')==='1')document.body.classList.add('embedded');
@@ -8,6 +9,8 @@ if(experiments){$('#world-back').href='/atlas/lab/';$('#world-back').textContent
 let m,mode='space',viewer,camera,splat,loading=false,loaded=false,panoRender,panoScene,panoCamera,panoReady=false,panoLoading=false;
 let yaw=Math.PI,pitch=0,zUp=true,origin=[0,0,0],eye=[0,0,0],drawTimer=0,dragging=false,visible=true,lastScale=-1,settleTimer;
 const inspectionEye=experiments&&params.has('eye')?params.get('eye').split(',').map(Number):null;
+let bestRequest=null;
+function completeBest(){if(bestRequest===null||!loaded)return;applyBest();if(parent!==window)parent.postMessage({type:'pensieve-best-view-applied',requestId:bestRequest},location.origin);bestRequest=null;}
 function waiting(title,message){$('#waiting').hidden=false;$('#title').textContent=title;$('#message').textContent=message;}
 function announce(text){$('#view-hint').textContent=text;}
 function applyBest(){
@@ -25,7 +28,7 @@ async function poll(){
   if(!m){waiting('还没有空间记忆','此入口仅展示已生成的 World 空间。');return;}selection.value=m.id;
   $('#boundary-note').textContent=m.world_method==='reconstruction'?`由 ${m.input_count} 张合成场景视角重建。此实验的模型残缺或失真，最佳视角仅用于观察全貌。`:'单图不可见部分由 AI 补全，细节可能模糊。当前没有墙体碰撞。';
   $('#method-label').textContent=m.world_method==='reconstruction'?`RECONSTRUCTION · ${m.input_count} 视角重建`:'SPATIAL GEN · 单图生成';
-  $('#world-title').textContent=m.name.replace(/^World 验证 · /,'');$('#reference').src=m.photo_url;$('#original').src=m.photo_url;$('#status').textContent=m.message;
+  $('#world-title').textContent=m.name.replace(/^World 验证 · /,'');$('#reference').src=m.photo_url;$('#original').src=m.photo_url;$('#status').textContent=reviewFor(m)?.label||m.message;
   $('#preprocess-link').hidden=!['48bc169d57e89f8d9824364daacc180aac77d44dce852d493cac09da1093b06d','f898314586bfba751edeff2f1676002169f0a95052819eefc2fd90f3c6188d88'].includes(m.id);
   $('#details').textContent=m.world_id?`World ID：${m.world_id}`:'';const a=m.world_assets||{};$('#tab-pano').disabled=!a.panorama_url;$('#best-view').disabled=m.status!=='ready';
   for(const [key,id] of [['splat_url','download-splat'],['panorama_url','download-pano']])if(a[key]){$('#'+id).href=a[key];$('#'+id).hidden=false;}
@@ -67,8 +70,8 @@ async function loadSpace(){
   // Let the first asynchronous splat sort settle before exposing a black frame.
   await Promise.race([viewer.waitForRenderOver(250),new Promise(resolve=>setTimeout(resolve,3500))]);
   if(mode==='space'){$('#waiting').hidden=true;$('#controls').hidden=false;}
-  $('#elapsed').textContent='';if(parent!==window)parent.postMessage({type:'pensieve-world-ready'},location.origin);
- }catch(e){viewer?.destroy();viewer=null;lastScale=-1;if(mode==='space')waiting('3D 空间暂未打开',e.message||'可先切到流畅全景查看。');}finally{loading=false;}
+  $('#elapsed').textContent='';completeBest();if(parent!==window)parent.postMessage({type:'pensieve-world-ready'},location.origin);
+ }catch(e){if(parent!==window)parent.postMessage({type:'pensieve-world-error'},location.origin);viewer?.destroy();viewer=null;loaded=false;delete $('#space').dataset.loaded;lastScale=-1;if(mode==='space')waiting('3D 空间暂未打开',e.message||'可先切到流畅全景查看。');}finally{loading=false;}
 }
 function drawPano(){if(!panoReady||mode!=='pano'||!visible||document.hidden)return;const c=Math.cos(pitch);panoCamera.lookAt(c*Math.sin(yaw-Math.PI/2),Math.sin(pitch),-c*Math.cos(yaw-Math.PI/2));panoRender.render(panoScene,panoCamera);}
 async function loadPano(){
@@ -100,7 +103,7 @@ for(const el of [$('#space'),$('#pano')]){
 function move(forward,side){const a=zUp?[Math.cos(yaw)*forward-Math.sin(yaw)*side,Math.sin(yaw)*forward+Math.cos(yaw)*side,0]:[Math.sin(yaw)*forward+Math.cos(yaw)*side,0,-Math.cos(yaw)*forward+Math.sin(yaw)*side];eye=eye.map((v,i)=>Math.max(origin[i]-1.5,Math.min(origin[i]+1.5,v+a[i])));$('#space').dataset.view='manual';look();}
 addEventListener('keydown',e=>{if(!loaded||mode!=='space'||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)||e.target.matches('select,input'))return;e.preventDefault();move(e.key==='ArrowUp'?.1:e.key==='ArrowDown'?-.1:0,e.key==='ArrowLeft'?-.1:e.key==='ArrowRight'?.1:0);});
 addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==parent||parent===window)return;
- if(e.data?.type==='pensieve-best-view')applyBest();
+ if(e.data?.type==='pensieve-best-view'){bestRequest=e.data.requestId;switchMode('space');if(loaded&&!loading)completeBest();}
  if(e.data?.type==='pensieve-world-mode'&&['space','pano'].includes(e.data.mode))switchMode(e.data.mode);
  if(e.data?.type==='pensieve-world-visibility'){visible=e.data.visible===true;if(!visible)viewer?.pause();else{size();requestDraw();drawPano();}}
 });
