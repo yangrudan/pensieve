@@ -1,10 +1,15 @@
 import * as THREE from '../../vendor/three.module.js';
 import { GLTFLoader } from '../../vendor/GLTFLoader.js';
+import { CRYSTAL_MODELS } from './catalog.js?v=20261022-1';
 import { createCrystalMaterial } from '../hybrid/crystal.js?v=20261022-4';
 
 // Read-only job polling. Opening this page never starts or resumes generation.
 export function watchGeneratedCrystal({scene,environment,canvas,changed,status}){
- const caseName='emerald-quartz-lux-v1',originals=new Map(),polished=new Map();
+ const design=CRYSTAL_MODELS.find(item=>item.key===new URLSearchParams(location.search).get('stone'))||CRYSTAL_MODELS[0],caseName=design.case,originals=new Map(),polished=new Map();
+ canvas.dataset.stoneKey=design.key;referenceLabel();
+ function referenceLabel(){document.querySelector('#request-link').href='./requests/'+design.key+'.json';}
+ const choices=document.querySelector('#api-stones');
+ for(const item of CRYSTAL_MODELS){const link=document.createElement('a');link.href='?source=aholo&stone='+item.key;link.dataset.stoneKey=item.key;link.style.setProperty('--stone',item.color);link.textContent=item.name;if(item.key===design.key)link.setAttribute('aria-current','page');choices.append(link);}
  let alive=true,timer,model;
  const originalButton=document.querySelector('#material-original'),polishedButton=document.querySelector('#material-polished');
  const clarity=document.querySelector('#crystal-clarity'),clarityValue=document.querySelector('#clarity-value'),referenceToggle=document.querySelector('#transmission-reference');
@@ -21,8 +26,8 @@ export function watchGeneratedCrystal({scene,environment,canvas,changed,status})
  for(const y of [.805,3.455]){
   const bar=new THREE.Mesh(new THREE.BoxGeometry(1.25,.012,.012),referenceMaterial);bar.position.set(0,y,-.85);reference.add(bar);
  }
- scene.add(reference);reference.visible=referenceToggle.checked;
- referenceToggle.onchange=()=>{reference.visible=referenceToggle.checked;changed();};
+ scene.add(reference);reference.visible=referenceToggle.checked;canvas.dataset.referenceVisible=String(reference.visible);
+ referenceToggle.onchange=()=>{reference.visible=referenceToggle.checked;canvas.dataset.referenceVisible=String(reference.visible);changed();};
  const label=document.querySelector('#color-name'),note=document.querySelector('.note');
  const release=root=>{const geometries=new Set(),materials=new Set(),textures=new Set();root?.traverse(n=>{if(n.geometry)geometries.add(n.geometry);for(const m of Array.isArray(n.material)?n.material:[n.material])if(m){materials.add(m);for(const value of Object.values(m))if(value?.isTexture&&value!==environment)textures.add(value);}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());};
  function material(mode){
@@ -31,7 +36,7 @@ export function watchGeneratedCrystal({scene,environment,canvas,changed,status})
    else{
     if(!polished.has(mesh)){
      const finish=base=>{
-      const next=createCrystalMaterial('#73ddbe',environment);
+      const next=createCrystalMaterial(design.color,environment);
       next.map=base.map||null;if(base.color)next.color.copy(base.color);
       next.normalMap=base.normalMap||null;if(base.normalScale)next.normalScale.copy(base.normalScale);
       next.transmission=Number(clarity.value)/100;
@@ -52,7 +57,7 @@ export function watchGeneratedCrystal({scene,environment,canvas,changed,status})
   originalButton.setAttribute('aria-pressed',String(mode==='original'));polishedButton.setAttribute('aria-pressed',String(mode==='polished'));
   clarity.disabled=mode==='original';clarityValue.textContent=clarity.value+'%';canvas.dataset.transmission=mode==='original'?'0':String(Number(clarity.value)/100);
   canvas.dataset.materialSource=mode==='original'?'aholo-original':'browser-polished';
-  status.textContent=mode==='original'?'AHOLO 原材质 · 拖动检查真实模型':'本地通透材质 · 透光背景和参照线位于水晶后方';changed();
+  status.textContent=mode==='original'?'AHOLO 原材质 · 拖动检查真实模型':'本地通透材质 · 拖动旋转，观察切面反光';changed();
  }
  clarity.oninput=()=>{for(const value of polished.values())for(const m of Array.isArray(value)?value:[value])m.transmission=Number(clarity.value)/100;clarityValue.textContent=clarity.value+'%';canvas.dataset.transmission=String(Number(clarity.value)/100);changed();};
  originalButton.onclick=()=>material('original');polishedButton.onclick=()=>material('polished');
@@ -63,8 +68,10 @@ export function watchGeneratedCrystal({scene,environment,canvas,changed,status})
    const data=await response.json(),job=data.items.find(item=>item.case===caseName);
    canvas.dataset.source='aholo-lux3d';canvas.dataset.jobStatus=job?.status||'not-submitted';
    if(!job){status.textContent='尚未提交样品；打开页面不会自动生成。';return;}
-   label.textContent='翡翠水晶 · Lux3D G1';
-   note.textContent=`造型来源：AHOLO Lux3D 文生 3D。任务 ${job.task_id||'提交中'}，累计 ${data.attempts} / ${data.limit} 次。当前仅试一颗，其余四颗未提交。`;
+   label.textContent=design.name+' · Lux3D G1';
+   const completed=CRYSTAL_MODELS.filter(item=>data.items.some(job=>job.case===item.case&&job.status==='ready')).length;
+   for(const link of choices.children){const item=CRYSTAL_MODELS.find(item=>item.key===link.dataset.stoneKey);link.dataset.status=data.items.find(job=>job.case===item.case)?.status||'not-submitted';}
+   note.textContent=`造型来源：AHOLO Lux3D 文生 3D。任务 ${job.task_id||'提交中'}，累计 ${data.attempts} / ${data.limit} 次。五种造型已完成 ${completed} / 5。`;
    if(job.status!=='ready'){
     status.textContent=job.message||'AHOLO 正在生成首颗样品…';
     if(['failed','uncertain','paused'].includes(job.status))return;

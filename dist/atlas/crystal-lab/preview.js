@@ -1,24 +1,33 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
 import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES } from '../hybrid/crystal.js?v=20261022-4';
-import { watchGeneratedCrystal } from './generated.js?v=20261022-4';
+import { watchGeneratedCrystal } from './generated.js?v=20261022-5';
 
 function start(){
  const canvas=document.querySelector('#crystal-scene'),stage=canvas.parentElement,status=document.querySelector('#preview-status');
  const aholoMode=new URLSearchParams(location.search).get('source')==='aholo';
  let releaseGenerated=()=>{};
  if(aholoMode){
-  document.querySelector('h1').textContent='AHOLO 首颗样品';
-  document.querySelector('#shape-description').textContent='先看真实生成的模型，再比较材质。其余四颗暂不生成。';
-  document.querySelector('.swatches').hidden=true;document.querySelector('#material-tools').hidden=false;document.querySelector('#clarity-tools').hidden=false;
+  document.querySelector('h1').textContent='AHOLO 魔法水晶';
+  document.querySelector('#shape-description').textContent='五种独立造型，逐颗读取 AHOLO 返回的模型。';
+  document.querySelector('.swatches').hidden=true;document.querySelector('#material-tools').hidden=false;document.querySelector('#clarity-tools').hidden=false;document.querySelector('#api-stones').hidden=false;
   document.querySelector('.note').textContent='造型来源：AHOLO Lux3D。正在读取已有任务。';
-  document.querySelector('#color-name').textContent='首颗翡翠水晶';
+  document.querySelector('#color-name').textContent='正在读取水晶模型';
  }
  let renderer;
  try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}
  catch{status.textContent='此设备暂不支持三维预览，请尝试其他浏览器。';document.querySelector('#reset').disabled=true;return;}
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.transmissionResolutionScale=.5;
  const scene=new THREE.Scene();scene.background=new THREE.Color('#0b171b');scene.fog=new THREE.Fog('#0b171b',9,23);
+ let studioBackdrop;
+ if(aholoMode){
+  // Continuous studio backdrop lights transmission without adding a board mesh.
+  const backdrop=document.createElement('canvas');backdrop.width=512;backdrop.height=512;
+  const context=backdrop.getContext('2d'),gradient=context.createRadialGradient(256,220,20,256,250,355);
+  gradient.addColorStop(0,'#738482');gradient.addColorStop(.55,'#34474b');gradient.addColorStop(1,'#0b171b');
+  context.fillStyle=gradient;context.fillRect(0,0,512,512);
+  studioBackdrop=new THREE.CanvasTexture(backdrop);studioBackdrop.colorSpace=THREE.SRGBColorSpace;scene.background=studioBackdrop;
+ }
  const camera=new THREE.PerspectiveCamera(38,1,.1,35),controls=new OrbitControls(camera,canvas);
  controls.enablePan=false;controls.enableDamping=!matchMedia('(prefers-reduced-motion: reduce)').matches;controls.minDistance=3.4;controls.maxDistance=8;controls.minPolarAngle=.48;controls.maxPolarAngle=1.58;
  const environment=createCrystalEnvironment(renderer);scene.environment=environment.texture;
@@ -32,7 +41,7 @@ function start(){
  part(new THREE.CylinderGeometry(.88,.95,.12,48),brass,.06);
  part(new THREE.CylinderGeometry(.67,.76,.68,48),stone,.46);
  part(new THREE.CylinderGeometry(.8,.75,.13,48),brass,.86);
- const floor=part(new THREE.PlaneGeometry(60,60),new THREE.MeshStandardMaterial({color:0x172725,metalness:.15,roughness:.5}),-.01);floor.rotation.x=-Math.PI/2;
+ const floor=part(new THREE.PlaneGeometry(60,60),new THREE.MeshStandardMaterial({color:0x172725,metalness:.15,roughness:.5}),-.01);floor.rotation.x=-Math.PI/2;floor.visible=!aholoMode;
  const loader=new THREE.TextureLoader();loader.load('/assets/limestone-albedo.webp',texture=>{texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(2,1);stone.map=texture;stone.needsUpdate=true;dirty=true;});
  let crystal,dirty=true,disposed=false,frameId;
  const colors=[['翡翠绿','#73ddbe'],['紫水晶','#9ca5ff'],['琥珀金','#edbc77'],['蔷薇粉','#e998bb'],['冰川蓝','#78c9ed']];
@@ -50,7 +59,7 @@ function start(){
  const observer=new ResizeObserver(resize);observer.observe(stage);if(aholoMode)releaseGenerated=watchGeneratedCrystal({scene,environment:environment.texture,canvas,changed:()=>dirty=true,status});else select(0);resize();reset();
  function frame(){frameId=requestAnimationFrame(frame);if(disposed||document.hidden)return;controls.update();if(!dirty)return;dirty=false;renderer.render(scene,camera);canvas.dataset.ready='true';canvas.dataset.frames=String(Number(canvas.dataset.frames||0)+1);if(!aholoMode)status.textContent='拖动旋转 · 滚轮或双指缩放';}
  frame();
- addEventListener('pagehide',()=>{disposed=true;cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();releaseGenerated();environment.dispose();const usedGeometries=new Set(Object.values(geometries)),materials=new Set();scene.traverse(node=>{if(node.geometry)usedGeometries.add(node.geometry);if(node.material)materials.add(node.material);});usedGeometries.forEach(g=>g.dispose());materials.forEach(m=>{m.map?.dispose();m.dispose();});renderer.dispose();});
+ addEventListener('pagehide',()=>{disposed=true;cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();releaseGenerated();studioBackdrop?.dispose();environment.dispose();const usedGeometries=new Set(Object.values(geometries)),materials=new Set();scene.traverse(node=>{if(node.geometry)usedGeometries.add(node.geometry);if(node.material)materials.add(node.material);});usedGeometries.forEach(g=>g.dispose());materials.forEach(m=>{m.map?.dispose();m.dispose();});renderer.dispose();});
  addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 }
 start();

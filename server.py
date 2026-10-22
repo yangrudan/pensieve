@@ -1,6 +1,6 @@
 """Local-only Pensieve server. Credentials stay in process memory."""
 from __future__ import annotations
-import argparse, base64, getpass, hashlib, io, json, os, secrets, threading, time, urllib.request
+import argparse, base64, getpass, hashlib, io, json, os, re, secrets, threading, time, urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -78,7 +78,7 @@ def work(mid, create=False):
             # No automatic generation retry. Reserve before any provider request.
             if m.get('generation_method')=='text_to_3d':
                 update(mid,status='submitting',message='正在向 AHOLO Lux3D 提交水晶造型生成')
-                task_id=lux.text_to_3d.create(prompt=m['prompt'],version='G1',face_count=50000,output_format=['zip','glb'],ai_predict_size=False)
+                task_id=lux.text_to_3d.create(prompt=m['prompt'],version='G1',face_count=m.get('face_count',50000),output_format=['zip','glb'],ai_predict_size=False)
             elif mode == 'multiview':
                 update(mid,status='submitting',message='正在提交四视图 3D 生成任务')
                 source = m['view_source_id']
@@ -129,6 +129,9 @@ def work(mid, create=False):
         update(mid, status='paused', message='生成仍未结束，稍后点击继续查询，不会重新生成')
     except Exception as exc:
         with LOCK: m = STATE['memories'][mid]
+        detail=str(exc).replace(KEY,'[REDACTED]') if KEY else str(exc)
+        detail=re.sub(r'https?://\S+','[URL]',detail)
+        update(mid,provider_error_type=type(exc).__name__,provider_error_code=getattr(exc,'cmd_code',None),provider_error_message=detail[:500])
         if m.get('task_id') or m.get('world_id'):
             update(mid, status='paused', message=safe_error(exc))
         else:
@@ -342,11 +345,28 @@ class Handler(SimpleHTTPRequestHandler):
                 length=int(self.headers.get('Content-Length','0'))
                 if not 0<length<1024:raise ValueError('实验请求大小无效')
                 body=json.loads(self.rfile.read(length));mid,settings=crystal_lab.prototype(body.get('case'))
+                if body.get('retry_business_rejection') is True:
+                    with LOCK:
+                        previous=STATE['memories'].get(mid,{})
+                        if ACTIVE or body.get('observed_error_type')!='BusinessError':return self.json_response({'error':'重提需要已核对的业务拒绝，且没有运行中的生成'},409)
+                        known={str(m['task_id']) for m in STATE['memories'].values() if m.get('task_id')}
+                    try:
+                        _,lux=clients();history=lux.tasks.list(page=1,page_size=100)
+                    except Exception:return self.json_response({'error':'暂时无法核对任务历史，未重提'},503)
+                    if not crystal_lab.verify_rejected_retry(previous,history,known):return self.json_response({'error':'任务历史不足以排除重复任务，不重提'},409)
+                    with LOCK:
+                        if ACTIVE or not crystal_lab.verify_rejected_retry(STATE['memories'].get(mid,{}),history,known):return self.json_response({'error':'任务状态变化，未重提'},409)
+                        if STATE['attempts']>=LIMIT:return self.json_response({'error':'生成次数已达上限'},429)
+                        item=STATE['memories'][mid]
+                        item.setdefault('submission_history',[]).append({'status':item['status'],'created_at':item['created_at'],'observed_error_type':'BusinessError','history_total':history['total'],'checked_at':time.time()})
+                        item.update(retry_count=1,status='submitting',message='业务拒绝已核对；完整任务历史未发现遗留任务，手动重提一次')
+                        STATE['attempts']+=1;save();start(mid,True)
+                    return self.json_response(public(item),202)
                 with LOCK:
                     if mid in STATE['memories']:return self.json_response(public(STATE['memories'][mid]))
-                    if ACTIVE:return self.json_response({'error':'请等待当前任务完成'},409)
+                    if any(not STATE['memories'].get(i,{}).get('experimental') for i in ACTIVE) or len(ACTIVE)>=2:return self.json_response({'error':'请等待当前任务完成'},409)
                     if STATE['attempts']>=LIMIT:return self.json_response({'error':f'已达到本轮 {LIMIT} 次生成上限'},429)
-                    m={'id':mid,'experimental':True,'case':settings['case'],'mode':'lux3d','generation_method':'text_to_3d','prompt':settings['prompt'],'name':'翡翠水晶 · Lux3D 首颗样品','source':'AHOLO Lux3D · 文生 3D','version':'G1','face_count':settings['face_count'],'created_at':time.time(),'status':'submitting','message':'已预留一次生成额度，准备提交水晶样品'}
+                    m={'id':mid,'experimental':True,'case':settings['case'],'mode':'lux3d','generation_method':'text_to_3d','prompt':settings['prompt'],'name':settings['name']+' · Lux3D','source':'AHOLO Lux3D · 文生 3D','version':'G1','face_count':settings['face_count'],'created_at':time.time(),'status':'submitting','message':'已预留一次生成额度，准备提交水晶样品'}
                     STATE['attempts']+=1;STATE['memories'][mid]=m;save();start(mid,True)
                 return self.json_response(public(m),202)
             except (ValueError,KeyError,TypeError):return self.json_response({'error':'水晶实验请求无效，未提交生成'},400)

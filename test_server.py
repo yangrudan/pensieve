@@ -156,10 +156,10 @@ class WorldExperimentTests(unittest.TestCase):
 class CrystalExperimentTests(unittest.TestCase):
     setUp=GenerationGuardTests.setUp
     tearDown=GenerationGuardTests.tearDown
-    def submit(self,case='emerald-quartz-lux-v1',token=True):
+    def submit(self,case='emerald-quartz-lux-v1',token=True,**extra):
         headers={'Content-Type':'application/json'}
         if token:headers['X-Pensieve-Token']=server.TOKEN
-        request=urllib.request.Request(self.root+'/api/crystal-experiments',data=json.dumps({'case':case}).encode(),headers=headers)
+        request=urllib.request.Request(self.root+'/api/crystal-experiments',data=json.dumps({'case':case,**extra}).encode(),headers=headers)
         try:
             with urllib.request.urlopen(request) as response:return response.status,json.load(response)
         except urllib.error.HTTPError as exc:return exc.code,json.load(exc)
@@ -169,9 +169,23 @@ class CrystalExperimentTests(unittest.TestCase):
         self.assertEqual(server.STATE['attempts'],1);self.start.assert_called_once()
         model=server.STATE['memories'][a[1]['id']]
         self.assertEqual(model['generation_method'],'text_to_3d');self.assertTrue(model['experimental'])
-    def test_other_crystals_are_held_for_quality_review(self):
+    def test_unknown_crystals_cannot_spend(self):
         self.assertEqual(self.submit('purple-cluster')[0],400)
         self.assertEqual(server.STATE['attempts'],0);self.start.assert_not_called()
+    def test_five_fixed_designs_share_budget_and_deduplicate(self):
+        ids=[]
+        for design in server.crystal_lab.CATALOG:
+            status,entry=self.submit(design['case']);self.assertEqual(status,202);ids.append(entry['id'])
+            self.assertEqual(entry['face_count'],design['face_count'])
+            self.assertEqual(self.submit(design['case'])[0],200)
+        self.assertEqual(len(set(ids)),5);self.assertEqual(server.STATE['attempts'],5)
+        self.assertEqual(ids[0],'86ee2204fe016c9a2c34c339c148e0f8b334a4409db3e610565254614bef5e9c')
+    def test_at_most_two_experimental_jobs(self):
+        server.STATE['memories']['a']={'experimental':True};server.ACTIVE.add('a')
+        self.assertEqual(self.submit()[0],202)
+        server.STATE['memories']['b']={'experimental':True};server.ACTIVE.add('b')
+        self.assertEqual(self.submit('amethyst-cluster-lux-v1')[0],409)
+        self.assertEqual(server.STATE['attempts'],1)
     def test_authentication_budget_and_busy_guard(self):
         self.assertEqual(self.submit(token=False)[0],403)
         server.STATE['attempts']=server.LIMIT
@@ -195,5 +209,20 @@ class CrystalExperimentTests(unittest.TestCase):
         self.assertEqual(server.STATE['memories'][mid]['status'],'uncertain')
         self.assertEqual(self.submit()[0],200);self.assertEqual(server.STATE['attempts'],1)
         lux.text_to_3d.create.assert_called_once()
+    def test_manual_business_rejection_retry_checks_full_history(self):
+        _,entry=self.submit();item=server.STATE['memories'][entry['id']]
+        item.update(status='uncertain',created_at=item['created_at']-120)
+        asset,lux=Mock(),Mock();lux.tasks.list.return_value={'items':[],'total':0}
+        with patch.object(server,'clients',return_value=(asset,lux)):
+            self.assertEqual(self.submit(retry_business_rejection=True,observed_error_type='TimeoutError')[0],409)
+            self.assertEqual(self.submit(retry_business_rejection=True,observed_error_type='BusinessError')[0],202)
+            self.assertEqual(self.submit(retry_business_rejection=True,observed_error_type='BusinessError')[0],409)
+        self.assertEqual(server.STATE['attempts'],2);self.assertEqual(item['retry_count'],1)
+    def test_unmatched_recent_or_incomplete_history_blocks_retry(self):
+        item={'status':'uncertain','created_at':1000}
+        verify=server.crystal_lab.verify_rejected_retry
+        self.assertFalse(verify(item,{'items':[],'total':1},set(),now=1200))
+        self.assertFalse(verify(item,{'items':[{'taskId':42,'created':1010}],'total':1},set(),now=1200))
+        self.assertTrue(verify(item,{'items':[{'taskId':42,'created':900}],'total':1},set(),now=1200))
 
 if __name__=='__main__':unittest.main()

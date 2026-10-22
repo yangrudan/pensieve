@@ -1,0 +1,14 @@
+{
+  "method": "POST",
+  "url": "https://api.aholo3d.cn/lux3d/v1/generate/text-to-3d/task/create",
+  "body": {
+    "prompt": "A single brilliant-cut octagonal amber gemstone, wide and relatively squat.\nFlat octagonal table at the top, sloped crown facets, a broad octagonal girdle and a deep faceted pavilion\nending in one bottom point. Clearly a cut jewel rather than a long quartz prism. Warm honey gold color.\nSymmetrical eight-sided diamond-cut silhouette with real volume. Polished transparent gemstone appearance with high optical clarity, crisp planar facets and fine beveled edges.\nClean translucent color with only sparse fine inclusions; no dark mottling or painted light rays.\nReal three-dimensional thickness and coherent solid gemstone geometry, refined physically based material.\nOnly the gemstone, isolated standalone 3D object: no pedestal, stand, floor, background, room, surrounding rocks,\nletters, symbols, particles or added light sources. Product-quality 3D asset.",
+    "version": "G1",
+    "faceCount": 20000,
+    "outputFormat": [
+      "zip",
+      "glb"
+    ],
+    "aiPredictSize": false
+  }
+}

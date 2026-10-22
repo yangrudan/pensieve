@@ -1,0 +1,14 @@
+{
+  "method": "POST",
+  "url": "https://api.aholo3d.cn/lux3d/v1/generate/text-to-3d/task/create",
+  "body": {
+    "prompt": "A single elongated pale ice-blue double-terminated crystal.\nSlender eight-sided prism with a long sharp pyramidal point at BOTH ends, upright main axis.\nThe upper and lower pointed terminations are clearly visible; no flat base.\nSymmetrical spear-like crystal, narrow waist, crisp long facets and icy light blue color. Polished transparent gemstone appearance with high optical clarity, crisp planar facets and fine beveled edges.\nClean translucent color with only sparse fine inclusions; no dark mottling or painted light rays.\nReal three-dimensional thickness and coherent solid gemstone geometry, refined physically based material.\nOnly the gemstone, isolated standalone 3D object: no pedestal, stand, floor, background, room, surrounding rocks,\nletters, symbols, particles or added light sources. Product-quality 3D asset.",
+    "version": "G1",
+    "faceCount": 20000,
+    "outputFormat": [
+      "zip",
+      "glb"
+    ],
+    "aiPredictSize": false
+  }
+}
