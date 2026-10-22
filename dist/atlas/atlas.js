@@ -1,6 +1,6 @@
 import { atlasRequest } from '../places.js';
 import { createRealm as createIslandRealm } from './realm.js';
-const createRealm=document.body.dataset.realm==='hybrid'?(await import('./hybrid/hall.js?v=20261022-3')).createRealm:createIslandRealm;
+const createRealm=document.body.dataset.realm==='hybrid'?(await import('./hybrid/hall.js?v=20261022-4')).createRealm:createIslandRealm;
 import { showView, clearViewer } from './viewer.js';
 const $=s=>document.querySelector(s);let data,memories=[],selected=null,editing=null,currentMemory=null;
 const realm=createRealm(selectPlace);

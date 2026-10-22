@@ -1,6 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
 import { setupMemoryLinker } from './linker.js?v=20261022-3';
+import { createCrystalGeometry,createCrystalEnvironment,createCrystal } from './crystal.js?v=20261022-2';
 
 // Mesh owns all navigable structure and clickable landmarks. Cached AHOLO
 // panoramas provide environmental illumination, never duplicate GS geometry.
@@ -11,6 +12,7 @@ export function createRealm(onSelect){
  try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}
  catch{$('#hall-status').textContent='设备暂不支持三维显示，仍可在下方选择地点';setupMemoryLinker(()=>{});$('#hall-mood').disabled=true;$('#hall-help').onclick=()=>$('#hall-about').showModal();$('#hall-close-about').onclick=()=>$('#hall-about').close();return {setPlaces(){},focus(){},setPaused(){}};}
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+ renderer.transmissionResolutionScale=.5;
  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
  const scene=new THREE.Scene();scene.background=new THREE.Color(0x101d30);scene.fog=new THREE.Fog(0x101d30,24,62);
  const camera=new THREE.PerspectiveCamera(55,1,.1,95),controls=new OrbitControls(camera,canvas);
@@ -78,16 +80,15 @@ export function createRealm(onSelect){
  $('#hall-mood').onclick=()=>loadMood(mood==='moon'?'day':'moon');
  $('#hall-help').onclick=()=>{$('#hall-about').showModal();setPaused(true);};$('#hall-close-about').onclick=()=>$('#hall-about').close();$('#hall-about').addEventListener('close',()=>setPaused(false));
  const glowCanvas=document.createElement('canvas');glowCanvas.width=128;glowCanvas.height=128;const ctx=glowCanvas.getContext('2d'),gradient=ctx.createRadialGradient(64,64,0,64,64,64);gradient.addColorStop(0,'#ffffffaa');gradient.addColorStop(.25,'#ffffff33');gradient.addColorStop(1,'#ffffff00');ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);const glowMap=new THREE.CanvasTexture(glowCanvas);
- function crystalGeometry(){const points=[];for(let i=0;i<6;i++){const a=i*Math.PI/3;points.push(new THREE.Vector3(Math.sin(a)*.43,.05,Math.cos(a)*.43),new THREE.Vector3(Math.sin(a)*.5,1.15,Math.cos(a)*.5));}const top=new THREE.Vector3(.02,1.92,-.02),bottom=new THREE.Vector3(0,-.2,0),vertices=[];const tri=(a,b,c)=>vertices.push(...a.toArray(),...b.toArray(),...c.toArray());for(let i=0;i<6;i++){const a=points[i*2],b=points[i*2+1],c=points[(i*2+2)%12],d=points[(i*2+3)%12];tri(a,b,c);tri(b,d,c);tri(b,top,d);tri(c,bottom,a);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.computeVertexNormals();return g;}
  function position(i){const positions=[[-6,0,1],[-3.5,0,-3.2],[0,0,-5],[3.5,0,-3.2],[6,0,1]];if(i<5)return new THREE.Vector3(...positions[i]);const a=(i-5)/7*Math.PI*1.65+.55;return new THREE.Vector3(Math.sin(a)*10,0,Math.cos(a)*10);}
- const gemGeometry=crystalGeometry();
+ const gemGeometry=createCrystalGeometry(),crystalEnvironment=createCrystalEnvironment(renderer);
  function clearNodes(){nodeRoot.traverse(n=>{if(n.material)for(const material of Array.isArray(n.material)?n.material:[n.material])if(![stone,darkStone,gold].includes(material))material.dispose();if(n.geometry&&![gemGeometry,pedestalFoot,pedestalBody,pedestalCap].includes(n.geometry))n.geometry.dispose();});scene.remove(nodeRoot);nodeRoot=new THREE.Group();scene.add(nodeRoot);nodes=[];labels.replaceChildren();}
  function setPlaces(places,counts){
   clearNodes();places.forEach((place,i)=>{const pos=position(i),group=new THREE.Group();group.position.copy(pos);nodeRoot.add(group);
    mesh(pedestalFoot,darkStone,group,0,.12,0);mesh(pedestalBody,stone,group,0,.7,0);mesh(pedestalCap,gold,group,0,1.29,0);
    const gemGroup=new THREE.Group();gemGroup.position.y=1.5;gemGroup.userData.placeId=place.id;group.add(gemGroup);
-   const material=new THREE.MeshPhysicalMaterial({color:place.color,emissive:place.color,emissiveIntensity:.14,roughness:.14,metalness:.3,clearcoat:1,envMapIntensity:1.5,flatShading:true});const gem=mesh(gemGeometry,material,gemGroup);gem.rotation.y=i*.42;
-   const aura=new THREE.Sprite(new THREE.SpriteMaterial({map:glowMap,color:place.color,transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false}));aura.position.y=2.15;aura.scale.set(3.1,3.1,1);group.add(aura);
+   const gem=createCrystal(place.color,crystalEnvironment.texture,gemGeometry);gemGroup.add(gem);gem.rotation.y=i*.42;
+   const aura=new THREE.Sprite(new THREE.SpriteMaterial({map:glowMap,color:place.color,transparent:true,opacity:.12,blending:THREE.AdditiveBlending,depthWrite:false}));aura.position.y=2.15;aura.scale.set(2.7,2.7,1);group.add(aura);
    const marker=ring(.9,.025,.03,new THREE.MeshBasicMaterial({color:place.color,transparent:true,opacity:.6}),group);
    const symbol=mesh(new THREE.TorusGeometry(.24,.012,5,32),gold,group,0,.73,.715);symbol.rotation.y=.05;
    const label=document.createElement('button');label.className='stone-label';label.style.setProperty('--stone',place.color);label.setAttribute('aria-label',`打开${place.name}的记忆`);label.setAttribute('aria-pressed',String(place.id===focused));label.dataset.place=place.id;
@@ -118,13 +119,13 @@ export function createRealm(onSelect){
   if(controls.update())dirty=true;if(!dirty)return;dirty=false;const radius=Math.hypot(camera.position.x,camera.position.z);if(radius>13){camera.position.x*=13/radius;camera.position.z*=13/radius;}camera.position.y=Math.max(1.2,Math.min(10,camera.position.y));
   if(!reduced){ripples.forEach((r,i)=>{const s=.9+Math.sin(t*.7+i*2)*.07;r.scale.set(s,s,1);});waterMaterial.roughness=.2+Math.sin(t*.5)*.025;}
   camera.updateMatrixWorld();
-  for(const n of nodes){n.marker.material.opacity=focused===n.id?.95:.5;n.aura.material.opacity=(focused===n.id?.5:.28)+(reduced?0:Math.sin(t*.8)*.03);
+  for(const n of nodes){n.marker.material.opacity=focused===n.id?.95:.5;n.aura.material.opacity=(focused===n.id?.18:.10)+(reduced?0:Math.sin(t*.8)*.015);
    projected.copy(n.pos);projected.y=1.05;projected.project(camera);n.label.style.left=`${(projected.x*.5+.5)*innerWidth}px`;n.label.style.top=`${(-projected.y*.5+.5)*innerHeight}px`;n.label.hidden=projected.z< -1||projected.z>1||Math.abs(projected.x)>1||Math.abs(projected.y)>1;
   }
   renderer.render(scene,camera);canvas.dataset.rendered='true';canvas.dataset.frameCount=String((Number(canvas.dataset.frameCount)||0)+1);
  }
  raf=requestAnimationFrame(frame);
- addEventListener('pagehide',()=>{disposed=true;moodSeq++;cancelAnimationFrame(raf);clearTimeout(settleTimer);controls.dispose();environmentCache.forEach(x=>{x.texture.dispose();x.target.dispose();});pmrem.dispose();scene.traverse(n=>{n.geometry?.dispose();if(n.material)for(const m of Array.isArray(n.material)?n.material:[n.material])m.dispose();});glowMap.dispose();renderer.dispose();});
+ addEventListener('pagehide',()=>{disposed=true;moodSeq++;cancelAnimationFrame(raf);clearTimeout(settleTimer);controls.dispose();environmentCache.forEach(x=>{x.texture.dispose();x.target.dispose();});pmrem.dispose();crystalEnvironment.dispose();scene.traverse(n=>{n.geometry?.dispose();if(n.material)for(const m of Array.isArray(n.material)?n.material:[n.material])m.dispose();});glowMap.dispose();renderer.dispose();});
  addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
  return {setPlaces,focus,setPaused};
 }
