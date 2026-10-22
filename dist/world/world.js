@@ -28,7 +28,7 @@ async function poll(){
   if(!m){waiting('还没有空间记忆','此入口仅展示已生成的 World 空间。');return;}selection.value=m.id;
   $('#boundary-note').textContent=m.world_method==='reconstruction'?`由 ${m.input_count} 张合成场景视角重建。此实验的模型残缺或失真，最佳视角仅用于观察全貌。`:'单图不可见部分由 AI 补全，细节可能模糊。当前没有墙体碰撞。';
   $('#method-label').textContent=m.world_method==='reconstruction'?`RECONSTRUCTION · ${m.input_count} 视角重建`:'SPATIAL GEN · 单图生成';
-  $('#world-title').textContent=m.name.replace(/^World 验证 · /,'');$('#reference').src=m.photo_url;$('#original').src=m.photo_url;$('#status').textContent=reviewFor(m)?.label||m.message;
+  $('#world-title').textContent=m.name.replace(/^World 验证 · /,'');$('#reference').src=m.photo_url;$('#original').src=m.photo_url;$('#status').textContent=reviewFor(m)?'本地初审：'+reviewFor(m).label:m.message;
   $('#preprocess-link').hidden=!['48bc169d57e89f8d9824364daacc180aac77d44dce852d493cac09da1093b06d','f898314586bfba751edeff2f1676002169f0a95052819eefc2fd90f3c6188d88'].includes(m.id);
   $('#details').textContent=m.world_id?`World ID：${m.world_id}`:'';const a=m.world_assets||{};$('#tab-pano').disabled=!a.panorama_url;$('#best-view').disabled=m.status!=='ready';
   for(const [key,id] of [['splat_url','download-splat'],['panorama_url','download-pano']])if(a[key]){$('#'+id).href=a[key];$('#'+id).hidden=false;}
