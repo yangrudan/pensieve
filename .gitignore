@@ -11,3 +11,4 @@ __pycache__/
 /WORLD_PREPROCESSING.md
 *.local
 .env.*
+/dist/atlas/cloud-lab/frames/
