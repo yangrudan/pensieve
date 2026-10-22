@@ -1,7 +1,7 @@
 import {createViewer,setViewerConfig,PerspectiveCamera,BackgroundMode,Vector3,Color,SplatLoader,SplatUtils} from '../vendor/aholo/index.js';
 import * as THREE from '../vendor/three.module.js';
 import {bestView,renderScale} from './view-presets.js';
-import {reviewFor} from '../atlas/lab/quality.js';
+import {reviewFor} from '../atlas/lab/quality.js?v=20261022-daylight-reviewed';
 const $=s=>document.querySelector(s),params=new URLSearchParams(location.search);
 const experiments=params.get('experiment')==='1',requested=params.get('id');
 if(params.get('embed')==='1')document.body.classList.add('embedded');
@@ -51,7 +51,7 @@ function updateScale(){if(!viewer)return;const b=$('#space').getBoundingClientRe
 function requestDraw(){
  if(!viewer||mode!=='space'||!visible||document.hidden){viewer?.pause();return;}
  if(drawTimer)return;
- drawTimer=setTimeout(()=>{drawTimer=0;if(!viewer||mode!=='space'||!visible||document.hidden)return;const b=$('#space').getBoundingClientRect();if(!b.width||!b.height)return;viewer.resume();updateScale();viewer.render();},dragging?50:33);
+ drawTimer=requestAnimationFrame(()=>{drawTimer=0;if(!viewer||mode!=='space'||!visible||document.hidden)return;const b=$('#space').getBoundingClientRect();if(!b.width||!b.height)return;viewer.resume();updateScale();viewer.render();});
 }
 function size(){
  if(viewer&&camera){const b=$('#space').getBoundingClientRect();if(b.width&&b.height){camera.aspect=b.width/b.height;camera.updateProjectionMatrix();updateScale();viewer.resize();viewer.setCamera(camera);requestDraw();}}
@@ -108,7 +108,7 @@ addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==parent|
  if(e.data?.type==='pensieve-world-visibility'){visible=e.data.visible===true;if(!visible)viewer?.pause();else{size();requestDraw();drawPano();}}
 });
 new ResizeObserver(size).observe($('#space'));addEventListener('resize',size);addEventListener('visibilitychange',()=>{if(document.hidden)viewer?.pause();else{requestDraw();drawPano();}});
-addEventListener('pagehide',()=>{clearTimeout(drawTimer);clearTimeout(settleTimer);viewer?.destroy();panoScene?.traverse(n=>{n.geometry?.dispose();n.material?.map?.dispose();n.material?.dispose();});panoRender?.dispose();});
+addEventListener('pagehide',()=>{cancelAnimationFrame(drawTimer);clearTimeout(settleTimer);viewer?.destroy();panoScene?.traverse(n=>{n.geometry?.dispose();n.material?.map?.dispose();n.material?.dispose();});panoRender?.dispose();});
 addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 $('#world-version').onchange=e=>location.href='/world/?id='+encodeURIComponent(e.target.value)+(experiments?'&experiment=1':'');
 if(params.get('view')==='pano')switchMode('pano');poll();
