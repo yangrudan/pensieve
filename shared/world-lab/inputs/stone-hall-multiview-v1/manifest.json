@@ -1,0 +1,32 @@
+{
+  "name": "魔法石之境 · 24 视角重建",
+  "method": "reconstruction",
+  "images": [
+    "view-00.jpg",
+    "view-01.jpg",
+    "view-02.jpg",
+    "view-03.jpg",
+    "view-04.jpg",
+    "view-05.jpg",
+    "view-06.jpg",
+    "view-07.jpg",
+    "view-08.jpg",
+    "view-09.jpg",
+    "view-10.jpg",
+    "view-11.jpg",
+    "view-12.jpg",
+    "view-13.jpg",
+    "view-14.jpg",
+    "view-15.jpg",
+    "view-16.jpg",
+    "view-17.jpg",
+    "view-18.jpg",
+    "view-19.jpg",
+    "view-20.jpg",
+    "view-21.jpg",
+    "view-22.jpg",
+    "view-23.jpg"
+  ],
+  "task_quality": "normal",
+  "scene_provenance": "One deterministic Three.js scene, generated limestone texture, fixed geometry and illumination, translated cameras on a complete loop. Synthetic render dataset, not real photographs."
+}

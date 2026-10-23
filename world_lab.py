@@ -7,7 +7,26 @@ def case_folder(root, case):
     if not isinstance(case,str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}',case):raise ValueError('实验名称无效')
     base=(root/'.local/world-lab').resolve();folder=(base/case).resolve()
     if folder.parent!=base:raise ValueError('实验目录无效')
+    if not folder.exists():
+        base=(root/'shared/world-lab/inputs').resolve();folder=(base/case).resolve()
+        if folder.parent!=base:raise ValueError('实验目录无效')
     return folder
+
+def bundled_items(root):
+    """Read-only published experiments; never merge into personal state/quota."""
+    index=root/'shared/world-lab/index.json'
+    if not index.is_file():return []
+    items=json.loads(index.read_text())['items']
+    return [m for m in items if m.get('experimental') is True and m.get('mode')=='world'
+            and m.get('status')=='ready' and re.fullmatch(r'[a-f0-9]{64}',m.get('id',''))]
+
+def bundled_asset(root, mid, filename):
+    item=next((m for m in bundled_items(root) if m['id']==mid),None)
+    if not item:return None
+    expected=f'/world-assets/{mid}/{filename}'
+    if expected not in item.get('world_assets',{}).values():return None
+    folder=(root/'shared/world-lab/assets'/mid).resolve();file=(folder/filename).resolve()
+    return file if file.parent==folder and file.is_file() else None
 
 def input_file(root, case, name):
     folder=case_folder(root,case);manifest=json.loads((folder/'manifest.json').read_text())

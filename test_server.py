@@ -153,6 +153,54 @@ class WorldExperimentTests(unittest.TestCase):
         server.STATE['attempts']=0;server.ACTIVE.add('personal-job')
         self.assertEqual(self.submit(case)[0],409);self.assertEqual(server.STATE['attempts'],0)
 
+class SharedWorldTests(unittest.TestCase):
+    setUp=GenerationGuardTests.setUp
+    tearDown=GenerationGuardTests.tearDown
+    atlas_post=AtlasTests.atlas_post
+
+    def bundle(self):
+        patch.object(server,'ROOT',server.DATA).start()
+        folder=server.DATA/'shared/world-lab/inputs/shared-test';folder.mkdir(parents=True)
+        Image.new('RGB',(16,16),(20,30,40)).save(folder/'reference.jpg')
+        (folder/'manifest.json').write_text(json.dumps({'method':'generation','images':['reference.jpg']}))
+        _,_,mid=server.world_lab.load_case(server.ROOT,'shared-test')
+        item={'id':mid,'experimental':True,'case':'shared-test','mode':'world','status':'ready','name':'Shared hall','world_assets':{'splat_url':f'/world-assets/{mid}/space.spz','format':'spz'}}
+        (server.DATA/'shared/world-lab/index.json').write_text(json.dumps({'items':[item]}))
+        assets=server.DATA/'shared/world-lab/assets'/mid;assets.mkdir(parents=True)
+        (assets/'space.spz').write_bytes(b'shared-splat')
+        (assets/'provider-result.json').write_text('private')
+        server.STATE.update(attempts=9,memories={'personal':{'id':'personal','name':'Mac memory','status':'ready'}})
+        server.STATE['atlas']={'places':[{'id':'mac-place'}]};server.save()
+        return item
+
+    def get(self,path):
+        with urllib.request.urlopen(self.root+path) as response:return response.read()
+
+    def test_shared_read_and_duplicate_submission_preserve_personal_state_and_budget(self):
+        item=self.bundle();before=(server.DATA/'state.json').read_bytes()
+        self.assertEqual(json.loads(self.get('/api/experiments'))['items'],[item])
+        self.assertEqual(json.loads(self.get('/api/memories'))['items'][0]['name'],'Mac memory')
+        self.assertEqual(self.get(item['world_assets']['splat_url']),b'shared-splat')
+        self.assertTrue(self.get('/lab-inputs/shared-test/reference.jpg').startswith(b'\xff\xd8'))
+        code,existing=self.atlas_post({'case':'shared-test'},path='/api/experiments')
+        self.assertEqual(code,200);self.assertEqual(existing['id'],item['id'])
+        self.assertEqual((server.DATA/'state.json').read_bytes(),before)
+        self.assertEqual(server.STATE['attempts'],9);self.start.assert_not_called()
+
+    def test_local_record_and_asset_take_precedence(self):
+        item=self.bundle();local={**item,'name':'Local hall'};server.STATE['memories'][item['id']]=local
+        self.assertEqual(json.loads(self.get('/api/experiments'))['items'],[local])
+        folder=server.DATA/item['id'];folder.mkdir();(folder/'space.spz').write_bytes(b'local-splat')
+        self.assertEqual(self.get(item['world_assets']['splat_url']),b'local-splat')
+
+    def test_unlisted_assets_and_missing_files_return_404(self):
+        item=self.bundle();mid=item['id']
+        for name in ['provider-result.json','panorama.jpg']:
+            with self.assertRaises(urllib.error.HTTPError) as error:self.get(f'/world-assets/{mid}/{name}')
+            self.assertEqual(error.exception.code,404)
+        with self.assertRaises(urllib.error.HTTPError) as error:self.get('/lab-inputs/shared-test/manifest.json')
+        self.assertEqual(error.exception.code,404)
+
 class CrystalExperimentTests(unittest.TestCase):
     setUp=GenerationGuardTests.setUp
     tearDown=GenerationGuardTests.tearDown

@@ -98,6 +98,13 @@ World 数据保存在 `.runtime/<memory-id>/`，包括空间 SPZ 或 PLY、全�
 
 实际返回与质量评估：[WORLD_EXPERIMENTS.md](WORLD_EXPERIMENTS.md)。
 
+### Mac mini / 多机器查看实验
+
+四组 AI 大厅实验现随私密仓库保存于 `shared/world-lab/`（约 45 MB）。另一台机器执行 `git pull --ff-only` 并重启 Python 服务后，可直接打开 `/atlas/lab/`。无需重新生成，也不要复制覆盖 `.runtime/state.json`。
+
+服务端将这些已完成实验作为只读资源加载，保留本机生成的记忆、地点标签与额度计数；同 ID 或同 case 的本机实验优先。个人照片和模型仍不提交 Git，不会自动跨机器同步。资源范围与加载规则见 [共享实验说明](shared/world-lab/README.md)。
+
+
 ### 世界查看器的最佳视角与流畅预览
 
 实验页可直接点击「最佳视角」打开并定位大厅；拖动后再次点击即可回到预设位置。两个未通过质量检查的重建结果会定位到全貌，不会把残缺模型描述成完整大厅。

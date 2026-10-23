@@ -37,6 +37,12 @@ def update(mid, **values):
 def public(m):
     return {k: v for k, v in m.items() if k in {'id','name','status','message','task_id','created_at','model_url','photo_url','version','source','mode','world_id','world_assets','progress','completed_at','views','view_source_id','face_count','experimental','case','world_method','input_count'}}
 
+def experiment_items():
+    local=[public(m) for m in STATE['memories'].values() if m.get('experimental')]
+    cases={m.get('case') for m in local}
+    return local+[public(m) for m in world_lab.bundled_items(ROOT)
+                  if m['id'] not in STATE['memories'] and m.get('case') not in cases]
+
 def clients():
     config = AholoClientConfig(api_key=KEY, region='cn')
     return create_asset_client(config), create_lux3d_client(config)
@@ -282,7 +288,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/api/session':
             with LOCK: return self.json_response({'configured':bool(KEY),'token':TOKEN,'attempts':STATE['attempts'],'limit':LIMIT})
         if path == '/api/experiments':
-            with LOCK:return self.json_response({'items':[public(m) for m in STATE['memories'].values() if m.get('experimental')],'attempts':STATE['attempts'],'limit':LIMIT})
+            with LOCK:return self.json_response({'items':experiment_items(),'attempts':STATE['attempts'],'limit':LIMIT})
         if path.startswith('/lab-inputs/'):
             parts=path.split('/')
             try:
@@ -302,6 +308,7 @@ class Handler(SimpleHTTPRequestHandler):
             if len(mid)!=64 or any(c not in '0123456789abcdef' for c in mid) or filename not in ('space.spz','space.ply','panorama.jpg','view-0.jpg','view-1.jpg','view-2.jpg','view-3.jpg'):
                 return self.json_response({'error':'Not found'},404)
             file=DATA/mid/filename
+            if not file.is_file():file=world_lab.bundled_asset(ROOT,mid,filename) or file
             if not file.is_file():return self.json_response({'error':'Not found'},404)
             self.send_response(200);self.send_header('Content-Type','image/jpeg' if filename.endswith('.jpg') else 'application/octet-stream');self.send_header('Content-Length',str(file.stat().st_size));self.send_header('Cache-Control','private, max-age=3600');self.end_headers()
             with file.open('rb') as f:
@@ -378,6 +385,8 @@ class Handler(SimpleHTTPRequestHandler):
                 manifest,files,mid=world_lab.load_case(ROOT,case)
                 with LOCK:
                     if mid in STATE['memories']:return self.json_response(public(STATE['memories'][mid]))
+                    bundled=next((m for m in world_lab.bundled_items(ROOT) if m['id']==mid),None)
+                    if bundled:return self.json_response(public(bundled))
                     if any(not STATE['memories'].get(i,{}).get('experimental') for i in ACTIVE) or len(ACTIVE)>=2:return self.json_response({'error':'请等待当前任务完成'},409)
                     if STATE['attempts']>=LIMIT:return self.json_response({'error':f'已达到本轮 {LIMIT} 次生成上限'},429)
                     m={'id':mid,'case':case,'experimental':True,'mode':'world','world_method':manifest['method'],'input_count':len(files),'name':manifest.get('name',case),'source':'AHOLO World','version':'Reconstruction' if manifest['method']=='reconstruction' else 'Spatial Gen','created_at':time.time(),'status':'uploading','message':'正在上传实验视角','photo_url':f'/lab-inputs/{case}/{files[0].name}'}
