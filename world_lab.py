@@ -1,5 +1,5 @@
 """Validated local image sets for World experiments. No API calls here."""
-import hashlib, json, re
+import hashlib, json, re, math
 from pathlib import Path
 from PIL import Image
 
@@ -56,4 +56,16 @@ def load_case(root, case):
         hashes.add(h);digest.update(data);paths.append(file)
     quality=manifest.get('task_quality','normal')
     if quality not in ('low','normal','high'):raise ValueError('重建质量无效')
+    if manifest.get('require_geometry_check'):
+        if method!='reconstruction':raise ValueError('几何预检仅用于多图重建')
+        report=json.loads((folder/'geometry-check.json').read_text())
+        summary=report.get('summary',{})
+        limits={'min_inliers':(40,float('inf')),'max_rotation_error_deg':(0,2),
+                'max_translation_direction_error_deg':(0,15),'rotation_loop_drift_deg':(0,5)}
+        if summary.get('local_geometry_pass') is not True or summary.get('failed_pairs')!=0 or summary.get('checked_pairs')!=len(paths):raise ValueError('相机几何预检未通过')
+        for key,(low,high) in limits.items():
+            value=summary.get(key)
+            if not isinstance(value,(int,float)) or not math.isfinite(value) or not low<=value<=high:raise ValueError('相机几何误差超限')
+        expected={file.name:hashlib.sha256(file.read_bytes()).hexdigest() for file in paths}
+        if report.get('image_hashes')!=expected or report.get('poses_hash')!=hashlib.sha256((folder/'camera-poses.json').read_bytes()).hexdigest():raise ValueError('输入已变化，请重新做几何预检')
     return manifest,paths,digest.hexdigest()

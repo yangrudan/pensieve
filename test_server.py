@@ -1,5 +1,5 @@
 """Quota/idempotency tests. No network calls to AHOLO."""
-import base64, io, json, tempfile, threading, unittest, urllib.request, urllib.error
+import base64, hashlib, io, json, tempfile, threading, unittest, urllib.request, urllib.error
 from pathlib import Path
 from unittest.mock import patch, Mock
 from PIL import Image
@@ -152,6 +152,31 @@ class WorldExperimentTests(unittest.TestCase):
         self.assertEqual(self.submit(case)[0],429);self.assertEqual(server.STATE['attempts'],server.LIMIT)
         server.STATE['attempts']=0;server.ACTIVE.add('personal-job')
         self.assertEqual(self.submit(case)[0],409);self.assertEqual(server.STATE['attempts'],0)
+
+    def test_geometry_gate_blocks_missing_failed_and_stale_inputs_before_reservation(self):
+        case=self.make_case(name='geometry-gated')
+        folder=server.DATA/'.local/world-lab'/case
+        manifest=json.loads((folder/'manifest.json').read_text())
+        manifest['require_geometry_check']=True
+        (folder/'manifest.json').write_text(json.dumps(manifest))
+        self.assertEqual(self.submit(case)[0],400)
+        (folder/'camera-poses.json').write_text('[]')
+        summary={'local_geometry_pass':False,'failed_pairs':1,'checked_pairs':24,
+                 'min_inliers':100,'max_rotation_error_deg':.5,
+                 'max_translation_direction_error_deg':2,'rotation_loop_drift_deg':1}
+        report={'summary':summary,'image_hashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.glob('*.jpg')},
+                'poses_hash':hashlib.sha256((folder/'camera-poses.json').read_bytes()).hexdigest()}
+        (folder/'geometry-check.json').write_text(json.dumps(report))
+        self.assertEqual(self.submit(case)[0],400)
+        summary.update(local_geometry_pass=True,failed_pairs=0)
+        (folder/'geometry-check.json').write_text(json.dumps(report))
+        original=(folder/'0.jpg').read_bytes()
+        Image.new('RGB',(16,16),(100,100,100)).save(folder/'0.jpg')
+        self.assertEqual(self.submit(case)[0],400)
+        self.assertEqual(server.STATE['attempts'],0);self.start.assert_not_called()
+        (folder/'0.jpg').write_bytes(original)
+        self.assertEqual(self.submit(case)[0],202)
+        self.assertEqual(server.STATE['attempts'],1);self.start.assert_called_once()
 
 class SharedWorldTests(unittest.TestCase):
     setUp=GenerationGuardTests.setUp

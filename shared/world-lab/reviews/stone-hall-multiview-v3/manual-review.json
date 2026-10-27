@@ -1,0 +1,31 @@
+{
+  "case": "stone-hall-multiview-v3",
+  "structure": "passed_in_inspected_views",
+  "object_consistency": "Five colored crystals, five matching plinths, one basin; no added white crystals observed in inspected views.",
+  "inspected": [
+    "front",
+    "left-0.6",
+    "right-0.6",
+    "forward-0.6",
+    "back",
+    "quarter-left",
+    "quarter-right",
+    "overview-elevated"
+  ],
+  "default_view": {
+    "eye": [
+      -4.6,
+      0,
+      1.8
+    ],
+    "yaw": 0,
+    "pitch": -0.4,
+    "fov": 80
+  },
+  "limitations": [
+    "Some texture/edge blur remains",
+    "Not verified from every possible position",
+    "No collisions or memory-location interactions integrated",
+    "This is reconstruction of the synthetic input, not a repair of the old daylight single-image result."
+  ]
+}

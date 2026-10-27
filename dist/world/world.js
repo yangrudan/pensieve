@@ -1,7 +1,7 @@
 import {createViewer,setViewerConfig,PerspectiveCamera,BackgroundMode,Vector3,Color,SplatLoader,SplatUtils} from '../vendor/aholo/index.js';
 import * as THREE from '../vendor/three.module.js';
-import {bestView,renderScale} from './view-presets.js';
-import {reviewFor} from '../atlas/lab/quality.js?v=20261022-daylight-reviewed';
+import {bestView,renderScale,overviewFov} from './view-presets.js?v=20261027-overview-detail-2';
+import {reviewFor} from '../atlas/lab/quality.js?v=20261027-v3';
 const $=s=>document.querySelector(s),params=new URLSearchParams(location.search);
 const experiments=params.get('experiment')==='1',requested=params.get('id');
 if(params.get('embed')==='1')document.body.classList.add('embedded');
@@ -9,13 +9,15 @@ if(experiments){$('#world-back').href='/atlas/lab/';$('#world-back').textContent
 let m,mode='space',viewer,camera,splat,loading=false,loaded=false,panoRender,panoScene,panoCamera,panoReady=false,panoLoading=false;
 let yaw=Math.PI,pitch=0,zUp=true,origin=[0,0,0],eye=[0,0,0],drawTimer=0,dragging=false,visible=true,lastScale=-1,settleTimer;
 const inspectionEye=experiments&&params.has('eye')?params.get('eye').split(',').map(Number):null;
-let bestRequest=null;
+let bestRequest=null,detailMode=params.get('quality')==='detail',qualityInitialized=params.has('quality');
+function qualityLabel(){const button=$('#quality-mode');button.setAttribute('aria-pressed',String(detailMode));button.textContent=detailMode?'清晰模式':'流畅模式';}
+$('#quality-mode').onclick=()=>{detailMode=!detailMode;qualityInitialized=true;qualityLabel();lastScale=-1;if(viewer)setViewerConfig(viewer,{pipeline:{Splatting:{highPrecisionEnabled:detailMode}}});updateScale();requestDraw();};
 function completeBest(){if(bestRequest===null||!loaded)return;applyBest();if(parent!==window)parent.postMessage({type:'pensieve-best-view-applied',requestId:bestRequest},location.origin);bestRequest=null;}
 function waiting(title,message){$('#waiting').hidden=false;$('#title').textContent=title;$('#message').textContent=message;}
 function announce(text){$('#view-hint').textContent=text;}
 function applyBest(){
  const preset=bestView(m);origin=[...preset.eye];eye=[...origin];yaw=preset.yaw;pitch=preset.pitch;
- if(camera){camera.fov=preset.fov;camera.updateProjectionMatrix();}
+ if(camera){const b=$('#space').getBoundingClientRect();camera.fov=m?.case==='stone-hall-multiview-v3'?overviewFov(preset.fov,b.width/Math.max(b.height,1)):preset.fov;camera.updateProjectionMatrix();}
  if(panoCamera){panoCamera.fov=preset.fov;panoCamera.updateProjectionMatrix();}
  $('#space').dataset.view='best';announce(preset.hint);look();drawPano();
 }
@@ -25,8 +27,8 @@ async function poll(){
   const r=await fetch(experiments?'/api/experiments':'/api/memories',{signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error();const j=await r.json();
   $('#budget').textContent=`本轮 ${j.attempts} / ${j.limit} 次`;const worlds=j.items.filter(x=>x.mode==='world');m=requested?worlds.find(x=>x.id===requested):worlds.at(-1);
   const selection=$('#world-version');if(selection.options.length!==worlds.length)selection.replaceChildren(...worlds.map(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;return o;}));
-  if(!m){waiting('还没有空间记忆','此入口仅展示已生成的 World 空间。');return;}selection.value=m.id;
-  $('#boundary-note').textContent=m.world_method==='reconstruction'?`由 ${m.input_count} 张合成场景视角重建。此实验的模型残缺或失真，最佳视角仅用于观察全貌。`:'单图不可见部分由 AI 补全，细节可能模糊。当前没有墙体碰撞。';
+  if(!m){waiting('还没有空间记忆','此入口仅展示已生成的 World 空间。');return;}selection.value=m.id;if(!qualityInitialized){detailMode=m.case==='stone-hall-multiview-v3';qualityInitialized=true;}qualityLabel();
+  $('#boundary-note').textContent=m.world_method==='reconstruction'?`由 ${m.input_count} 张固定合成场景视角重建。${reviewFor(m)?.label?.startsWith('未通过')?'此实验的模型残缺或失真，最佳视角仅用于观察全貌。':'需核对实际输出的结构、物件数量及多位置一致性。'}`:'单图不可见部分由 AI 补全，细节可能模糊。当前没有墙体碰撞。';
   $('#method-label').textContent=m.world_method==='reconstruction'?`RECONSTRUCTION · ${m.input_count} 视角重建`:'SPATIAL GEN · 单图生成';
   $('#world-title').textContent=m.name.replace(/^World 验证 · /,'');$('#reference').src=m.photo_url;$('#original').src=m.photo_url;$('#status').textContent=reviewFor(m)?'本地初审：'+reviewFor(m).label:m.message;
   $('#preprocess-link').hidden=!['48bc169d57e89f8d9824364daacc180aac77d44dce852d493cac09da1093b06d','f898314586bfba751edeff2f1676002169f0a95052819eefc2fd90f3c6188d88'].includes(m.id);
@@ -45,16 +47,16 @@ async function poll(){
 function look(){
  if(!camera)return;camera.position.set(...eye);const c=Math.cos(pitch),d=zUp?new Vector3(c*Math.cos(yaw),c*Math.sin(yaw),Math.sin(pitch)):new Vector3(c*Math.sin(yaw),Math.sin(pitch),-c*Math.cos(yaw));
  camera.lookAt(new Vector3(eye[0]+d.x,eye[1]+d.y,eye[2]+d.z));camera.updateMatrixWorld();viewer?.setCamera(camera);requestDraw();
- $('#space').dataset.eye=JSON.stringify(eye);$('#space').dataset.yaw=String(yaw);
+ $('#space').dataset.eye=JSON.stringify(eye);$('#space').dataset.yaw=String(yaw);$('#space').dataset.fov=String(camera.fov);
 }
-function updateScale(){if(!viewer)return;const b=$('#space').getBoundingClientRect();if(!b.width||!b.height)return;const scale=renderScale(b.width,b.height,devicePixelRatio,dragging);if(Math.abs(scale-lastScale)>.015){lastScale=scale;setViewerConfig(viewer,{pixelRatio:scale});$('#space').dataset.renderScale=String(scale);}}
+function updateScale(){if(!viewer)return;const b=$('#space').getBoundingClientRect();if(!b.width||!b.height)return;const scale=renderScale(b.width,b.height,devicePixelRatio,dragging,detailMode);if(Math.abs(scale-lastScale)>.015){lastScale=scale;setViewerConfig(viewer,{pixelRatio:scale});$('#space').dataset.renderScale=String(scale);}}
 function requestDraw(){
  if(!viewer||mode!=='space'||!visible||document.hidden){viewer?.pause();return;}
  if(drawTimer)return;
  drawTimer=requestAnimationFrame(()=>{drawTimer=0;if(!viewer||mode!=='space'||!visible||document.hidden)return;const b=$('#space').getBoundingClientRect();if(!b.width||!b.height)return;viewer.resume();updateScale();viewer.render();});
 }
 function size(){
- if(viewer&&camera){const b=$('#space').getBoundingClientRect();if(b.width&&b.height){camera.aspect=b.width/b.height;camera.updateProjectionMatrix();updateScale();viewer.resize();viewer.setCamera(camera);requestDraw();}}
+ if(viewer&&camera){const b=$('#space').getBoundingClientRect();if(b.width&&b.height){camera.aspect=b.width/b.height;if(m?.case==='stone-hall-multiview-v3'&&$('#space').dataset.view==='best')camera.fov=overviewFov(bestView(m).fov,camera.aspect);camera.updateProjectionMatrix();$('#space').dataset.fov=String(camera.fov);updateScale();viewer.resize();viewer.setCamera(camera);requestDraw();}}
  if(panoRender&&panoCamera){const b=$('#pano').getBoundingClientRect();if(b.width&&b.height){panoRender.setSize(b.width,b.height);panoCamera.aspect=b.width/b.height;panoCamera.updateProjectionMatrix();drawPano();}}
 }
 async function loadSpace(){
@@ -64,8 +66,8 @@ async function loadSpace(){
   camera=new PerspectiveCamera(78,1,.02,500);const a=m.world_assets;zUp=a.up_axis==='Z';camera.up.set(0,zUp?0:1,zUp?1:0);
   const r=await fetch(a.splat_url);if(!r.ok)throw Error('本地 3DGS 文件读取失败');const data=await SplatLoader.parseSplatData(a.format==='spz'?SplatLoader.SplatFileType.SPZ:SplatLoader.SplatFileType.PLY,new Uint8Array(await r.arrayBuffer()),SplatLoader.SplatPackType.Compressed);
   splat=await SplatUtils.createSplat(data);viewer.getScene().add(splat);
-  setViewerConfig(viewer,{pipeline:{Background:{background:{active:BackgroundMode.BasicBackground,basic:{color:new Color(.02,.035,.04)}},ground:{enabled:false}},Splatting:{enabled:true},TAA:{enabled:false}}});viewer.requestRenderHandler=requestDraw;
-  applyBest();if(inspectionEye?.length===3&&inspectionEye.every(x=>Number.isFinite(x)&&Math.abs(x)<200)){origin=[...inspectionEye];eye=[...origin];const y=Number(params.get('yaw'));if(params.has('yaw')&&Number.isFinite(y))yaw=y;look();}
+  setViewerConfig(viewer,{pipeline:{Background:{background:{active:BackgroundMode.BasicBackground,basic:{color:new Color(.02,.035,.04)}},ground:{enabled:false}},Splatting:{enabled:true,highPrecisionEnabled:detailMode},TAA:{enabled:false}}});viewer.requestRenderHandler=requestDraw;
+  applyBest();if(inspectionEye?.length===3&&inspectionEye.every(x=>Number.isFinite(x)&&Math.abs(x)<200)){origin=[...inspectionEye];eye=[...origin];$('#space').dataset.view='inspection';const y=Number(params.get('yaw'));if(params.has('yaw')&&Number.isFinite(y))yaw=y;const p=Number(params.get('pitch'));if(params.has('pitch')&&Number.isFinite(p))pitch=Math.max(-1.4,Math.min(1.4,p));const f=Number(params.get('fov'));if(params.has('fov')&&Number.isFinite(f)&&f>=25&&f<=100){camera.fov=f;camera.updateProjectionMatrix();}look();}
   size();loaded=true;$('#space').dataset.loaded='true';requestDraw();
   // Let the first asynchronous splat sort settle before exposing a black frame.
   await Promise.race([viewer.waitForRenderOver(250),new Promise(resolve=>setTimeout(resolve,3500))]);

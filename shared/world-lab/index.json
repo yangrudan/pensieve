@@ -94,6 +94,29 @@
         "panorama_url": "/world-assets/1502509bb8d16f30c56d946d0647640002361a3fbec02b2ecc5ba9bdcab0a8a5/panorama.jpg",
         "up_axis": "Z"
       }
+    },
+    {
+      "id": "b58feee0f01db6f52ad77314ef67df1862bdc96cd91d122e1a346a6f156aeef6",
+      "case": "stone-hall-multiview-v3",
+      "experimental": true,
+      "mode": "world",
+      "world_method": "reconstruction",
+      "input_count": 72,
+      "name": "魔法石之境 · 72视角全局几何验证",
+      "source": "AHOLO World",
+      "version": "Reconstruction",
+      "created_at": 1793091339.827581,
+      "status": "ready",
+      "message": "World 记忆空间已就绪",
+      "photo_url": "/lab-inputs/stone-hall-multiview-v3/view-00.jpg",
+      "world_id": "3FO4K4QHO68N",
+      "progress": 1,
+      "completed_at": 1793091889.013919,
+      "world_assets": {
+        "splat_url": "/world-assets/b58feee0f01db6f52ad77314ef67df1862bdc96cd91d122e1a346a6f156aeef6/space.spz",
+        "format": "spz",
+        "up_axis": "Z"
+      }
     }
   ]
 }

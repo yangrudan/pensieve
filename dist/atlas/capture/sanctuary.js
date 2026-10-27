@@ -1,7 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 // One static scene, translated cameras, fixed lights. Capture views never synthesize new geometry.
 export async function createSanctuary(canvas,{variant='v1'}={}){
- const unique=variant==='v2';
+ const corrected=variant==='v3',unique=variant!=='v1';
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
  const scene=new THREE.Scene();scene.background=new THREE.Color(0x1b2a42);const camera=new THREE.PerspectiveCamera(78,innerWidth/innerHeight,.08,65);
  let seed=145;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
@@ -19,7 +19,9 @@ export async function createSanctuary(canvas,{variant='v1'}={}){
  mesh(new THREE.CylinderGeometry(2.12,2.2,.2,96),darkStone,0,.02,0);torus(2.13,.1,.17,stone);const water=mesh(new THREE.CircleGeometry(2.04,96),new THREE.MeshStandardMaterial({color:0x1c3b47,metalness:.65,roughness:.33}),0,.14,0);water.rotation.x=-Math.PI/2;water.castShadow=false;
  const ceiling=mesh(new THREE.SphereGeometry(10.5,64,32,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({map:wallMap,color:0x5b667c,roughness:.85,side:THREE.BackSide}),0,6.8,0);ceiling.scale.y=.52;
  const windowMat=new THREE.MeshBasicMaterial({color:0x244873});
- for(let i=0;i<16;i++){const a=i/16*Math.PI*2,s=Math.sin(a),c=Math.cos(a);const wall=mesh(new THREE.BoxGeometry(4,7,.35),stone,s*10.5,3.35,c*10.5);wall.rotation.y=a;
+ for(let i=0;i<16;i++){const a=i/16*Math.PI*2,s=Math.sin(a),c=Math.cos(a);let wallMaterial=stone;
+ if(corrected){const atlas=document.createElement('canvas');atlas.width=768;atlas.height=1024;const ctx=atlas.getContext('2d');ctx.drawImage(texture.image,0,0,768,1024);for(let j=0;j<750;j++){const x=rand()*768,y=rand()*1024;ctx.strokeStyle=`rgba(${rand()>.5?'231,220,191':'44,48,43'},${.12+rand()*.35})`;ctx.lineWidth=1+rand()*5;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+rand()*65-32,y+rand()*80-40);ctx.lineTo(x+rand()*80-40,y+rand()*110-55);ctx.stroke();}for(let j=0;j<15;j++){ctx.fillStyle=`rgba(65,72,67,${.07+rand()*.15})`;ctx.fillRect(rand()*700,rand()*970,25+rand()*60,20+rand()*45);}const map=new THREE.CanvasTexture(atlas);map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=4;wallMaterial=new THREE.MeshLambertMaterial({map,color:0xc1beb0});}
+ const wall=mesh(new THREE.BoxGeometry(4,7,.35),wallMaterial,s*10.5,3.35,c*10.5);wall.rotation.y=a;
  const pane=mesh(new THREE.PlaneGeometry(1.7,4.3),windowMat,s*10.28,4.5,c*10.28);pane.rotation.y=a+Math.PI;pane.castShadow=false;
  for(const dx of [-.96,.96]){const p=new THREE.Vector3(dx,3.7,10.02).applyAxisAngle(new THREE.Vector3(0,1,0),a);mesh(new THREE.CylinderGeometry(.11,.15,5.2,12),darkStone,p.x,p.y,p.z);}
  const columnPos=new THREE.Vector3(1.9,0,9.7).applyAxisAngle(new THREE.Vector3(0,1,0),a);const {x,z}=columnPos;mesh(new THREE.CylinderGeometry(.22,.29,6.9,16),stone,x,3.45,z);for(const y of [.16,.38,6.55,6.82])mesh(new THREE.CylinderGeometry(.4,.4,.16,16),darkStone,x,y,z);
@@ -30,7 +32,7 @@ export async function createSanctuary(canvas,{variant='v1'}={}){
  const colors=[0x73ddbe,0x9ca5ff,0xedbc77,0xe998bb,0x78c9ed];
  const crystalGeo=()=>{const verts=[],points=[];for(let i=0;i<6;i++){const a=i*Math.PI/3;points.push(new THREE.Vector3(Math.sin(a)*.48,.45,Math.cos(a)*.48),new THREE.Vector3(Math.sin(a)*.57,1.65,Math.cos(a)*.57));}const top=new THREE.Vector3(.03,2.55,-.03),bottom=new THREE.Vector3(0,.12,0);const tri=(a,b,c)=>verts.push(...a.toArray(),...b.toArray(),...c.toArray());for(let i=0;i<6;i++){const a=points[i*2],b=points[i*2+1],c=points[(i*2+2)%12],d=points[(i*2+3)%12];tri(a,b,c);tri(b,d,c);tri(b,top,d);tri(c,bottom,a);}const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));geo.computeVertexNormals();return geo;};
  for(let i=0;i<5;i++){const a=i/5*Math.PI*2+.28,x=Math.sin(a)*4.4,z=Math.cos(a)*4.4,color=colors[i];mesh(new THREE.CylinderGeometry(.78,.85,.18,8),darkStone,x,.14,z);const pedestal=mesh(new THREE.BoxGeometry(1.12,1.0,1.12),darkStone,x,.72,z);pedestal.rotation.y=a;for(const y of [.29,1.19]){const cap=mesh(new THREE.BoxGeometry(1.35,.12,1.35),gold,x,y,z);cap.rotation.y=a;}
- const crystal=mesh(crystalGeo(),new THREE.MeshPhysicalMaterial({color,emissive:color,emissiveIntensity:.09,roughness:.38,metalness:.22,clearcoat:1,flatShading:true}),x,1.19,z);crystal.rotation.y=i*.4;
+ const crystal=mesh(crystalGeo(),new THREE.MeshPhysicalMaterial({color,emissive:color,emissiveIntensity:.09,roughness:.38,metalness:.22,clearcoat:1,flatShading:true}),x,1.19,z);crystal.rotation.y=i*.4;crystal.name=`memory-crystal-${i+1}`;
  for(let k=0;k<8;k++){const angle=k*Math.PI/4;const mount=mesh(new THREE.ConeGeometry(.06,.35,4),gold,x+Math.sin(angle)*.55,1.44,z+Math.cos(angle)*.55);mount.rotation.z=Math.sin(angle)*-.3;}
  // A distinct medallion on every face of each plinth helps identify the same landmark.
  for(let side=0;side<4;side++){const angle=a+side*Math.PI/2;const ring=mesh(new THREE.TorusGeometry(.32,.018,5,48),gold,x+Math.sin(angle)*.566,.75,z+Math.cos(angle)*.566);ring.rotation.y=angle;for(let j=0;j<i+3;j++){const t=j/(i+3)*Math.PI*2;const p=new THREE.Vector3(Math.sin(t)*.2,Math.cos(t)*.2,0).applyAxisAngle(new THREE.Vector3(0,1,0),angle);const mark=mesh(new THREE.OctahedronGeometry(.035),gold,ring.position.x+p.x,ring.position.y+p.y,ring.position.z+p.z);}}
@@ -39,6 +41,8 @@ export async function createSanctuary(canvas,{variant='v1'}={}){
  }
  scene.add(new THREE.HemisphereLight(0x9bbee9,0x33302d,unique?2.2:1.5));const moon=new THREE.DirectionalLight(0xb9d5ff,3.5);moon.position.set(-6,11,-2);moon.castShadow=true;moon.shadow.mapSize.set(2048,2048);moon.shadow.camera.left=-11;moon.shadow.camera.right=11;moon.shadow.camera.top=11;moon.shadow.camera.bottom=-11;moon.shadow.bias=-.001;scene.add(moon);
  const fill=new THREE.PointLight(0xb5c4df,40,24,2);fill.position.set(0,6,0);scene.add(fill);
- function pose(i,total=24){const a=i/total*Math.PI*2+.15;camera.position.set(Math.sin(a)*7.9,1.9+Math.sin(i*.55)*.12,Math.cos(a)*7.9);camera.lookAt(0,1.5,0);camera.updateMatrixWorld();renderer.render(scene,camera);return {index:i,position:camera.position.toArray(),target:[0,1.5,0],fov:camera.fov,width:innerWidth,height:innerHeight,matrixWorld:camera.matrixWorld.toArray()};}
+ // View-independent diffuse surfaces prevent highlights becoming false matches.
+ if(corrected){scene.traverse(node=>{if(!node.isMesh)return;const previous=node.material;if(previous.isMeshLambertMaterial)return;node.material=new THREE.MeshLambertMaterial({color:previous.color,map:previous.map,emissive:previous.emissive||0x000000,emissiveIntensity:previous.emissiveIntensity??0,side:previous.side,flatShading:previous.flatShading});});renderer.toneMappingExposure=1.25;}
+ function pose(i,total=corrected?72:24){const a=i/total*Math.PI*2+.15,r=corrected?7.3+.15*Math.sin(a*3):7.9;camera.position.set(Math.sin(a)*r,corrected?1.9+.2*Math.sin(a*2):1.9+Math.sin(i*.55)*.12,Math.cos(a)*r);camera.lookAt(0,1.5,0);camera.updateMatrixWorld();renderer.render(scene,camera);const fy=innerHeight/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)));return {index:i,position:camera.position.toArray(),target:[0,1.5,0],fov:camera.fov,width:innerWidth,height:innerHeight,intrinsics:{fx:fy,fy,cx:innerWidth/2,cy:innerHeight/2},matrixWorld:camera.matrixWorld.toArray()};}
  pose(0);return {pose,scene,camera,renderer};
 }
