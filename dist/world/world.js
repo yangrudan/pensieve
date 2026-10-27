@@ -1,7 +1,7 @@
 import {createViewer,setViewerConfig,PerspectiveCamera,BackgroundMode,Vector3,Color,SplatLoader,SplatUtils} from '../vendor/aholo/index.js';
 import * as THREE from '../vendor/three.module.js';
-import {bestView,renderScale,overviewFov} from './view-presets.js?v=20261027-overview-detail-2';
-import {reviewFor} from '../atlas/lab/quality.js?v=20261027-v3';
+import {bestView,renderScale,overviewFov,detailView} from './view-presets.js?v=20261027-daylight-detail-final';
+import {reviewFor} from '../atlas/lab/quality.js?v=20261027-daylight-detail-final';
 const $=s=>document.querySelector(s),params=new URLSearchParams(location.search);
 const experiments=params.get('experiment')==='1',requested=params.get('id');
 if(params.get('embed')==='1')document.body.classList.add('embedded');
@@ -9,15 +9,17 @@ if(experiments){$('#world-back').href='/atlas/lab/';$('#world-back').textContent
 let m,mode='space',viewer,camera,splat,loading=false,loaded=false,panoRender,panoScene,panoCamera,panoReady=false,panoLoading=false;
 let yaw=Math.PI,pitch=0,zUp=true,origin=[0,0,0],eye=[0,0,0],drawTimer=0,dragging=false,visible=true,lastScale=-1,settleTimer;
 const inspectionEye=experiments&&params.has('eye')?params.get('eye').split(',').map(Number):null;
-let bestRequest=null,detailMode=params.get('quality')==='detail',qualityInitialized=params.has('quality');
+const detailedCase=memory=>['stone-hall-multiview-v3','stone-hall-detail-v1'].includes(memory?.case);
+let bestRequest=null,closeKind=null,detailMode=params.get('quality')==='detail',qualityInitialized=params.has('quality');
 function qualityLabel(){const button=$('#quality-mode');button.setAttribute('aria-pressed',String(detailMode));button.textContent=detailMode?'清晰模式':'流畅模式';}
 $('#quality-mode').onclick=()=>{detailMode=!detailMode;qualityInitialized=true;qualityLabel();lastScale=-1;if(viewer)setViewerConfig(viewer,{pipeline:{Splatting:{highPrecisionEnabled:detailMode}}});updateScale();requestDraw();};
 function completeBest(){if(bestRequest===null||!loaded)return;applyBest();if(parent!==window)parent.postMessage({type:'pensieve-best-view-applied',requestId:bestRequest},location.origin);bestRequest=null;}
 function waiting(title,message){$('#waiting').hidden=false;$('#title').textContent=title;$('#message').textContent=message;}
 function announce(text){$('#view-hint').textContent=text;}
 function applyBest(){
+ closeKind=null;
  const preset=bestView(m);origin=[...preset.eye];eye=[...origin];yaw=preset.yaw;pitch=preset.pitch;
- if(camera){const b=$('#space').getBoundingClientRect();camera.fov=m?.case==='stone-hall-multiview-v3'?overviewFov(preset.fov,b.width/Math.max(b.height,1)):preset.fov;camera.updateProjectionMatrix();}
+ if(camera){const b=$('#space').getBoundingClientRect();camera.fov=detailedCase(m)?overviewFov(preset.fov,b.width/Math.max(b.height,1)):preset.fov;camera.updateProjectionMatrix();}
  if(panoCamera){panoCamera.fov=preset.fov;panoCamera.updateProjectionMatrix();}
  $('#space').dataset.view='best';announce(preset.hint);look();drawPano();
 }
@@ -27,7 +29,7 @@ async function poll(){
   const r=await fetch(experiments?'/api/experiments':'/api/memories',{signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error();const j=await r.json();
   $('#budget').textContent=`本轮 ${j.attempts} / ${j.limit} 次`;const worlds=j.items.filter(x=>x.mode==='world');m=requested?worlds.find(x=>x.id===requested):worlds.at(-1);
   const selection=$('#world-version');if(selection.options.length!==worlds.length)selection.replaceChildren(...worlds.map(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;return o;}));
-  if(!m){waiting('还没有空间记忆','此入口仅展示已生成的 World 空间。');return;}selection.value=m.id;if(!qualityInitialized){detailMode=m.case==='stone-hall-multiview-v3';qualityInitialized=true;}qualityLabel();
+  if(!m){waiting('还没有空间记忆','此入口仅展示已生成的 World 空间。');return;}selection.value=m.id;if(!qualityInitialized){detailMode=detailedCase(m);qualityInitialized=true;}qualityLabel();for(const id of ['close-carving','close-basin','close-crystal']){$('#'+id).hidden=m.case!=='stone-hall-detail-v1';$('#'+id).disabled=!loaded;}
   $('#boundary-note').textContent=m.world_method==='reconstruction'?`由 ${m.input_count} 张固定合成场景视角重建。${reviewFor(m)?.label?.startsWith('未通过')?'此实验的模型残缺或失真，最佳视角仅用于观察全貌。':'需核对实际输出的结构、物件数量及多位置一致性。'}`:'单图不可见部分由 AI 补全，细节可能模糊。当前没有墙体碰撞。';
   $('#method-label').textContent=m.world_method==='reconstruction'?`RECONSTRUCTION · ${m.input_count} 视角重建`:'SPATIAL GEN · 单图生成';
   $('#world-title').textContent=m.name.replace(/^World 验证 · /,'');$('#reference').src=m.photo_url;$('#original').src=m.photo_url;$('#status').textContent=reviewFor(m)?'本地初审：'+reviewFor(m).label:m.message;
@@ -56,7 +58,7 @@ function requestDraw(){
  drawTimer=requestAnimationFrame(()=>{drawTimer=0;if(!viewer||mode!=='space'||!visible||document.hidden)return;const b=$('#space').getBoundingClientRect();if(!b.width||!b.height)return;viewer.resume();updateScale();viewer.render();});
 }
 function size(){
- if(viewer&&camera){const b=$('#space').getBoundingClientRect();if(b.width&&b.height){camera.aspect=b.width/b.height;if(m?.case==='stone-hall-multiview-v3'&&$('#space').dataset.view==='best')camera.fov=overviewFov(bestView(m).fov,camera.aspect);camera.updateProjectionMatrix();$('#space').dataset.fov=String(camera.fov);updateScale();viewer.resize();viewer.setCamera(camera);requestDraw();}}
+ if(viewer&&camera){const b=$('#space').getBoundingClientRect();if(b.width&&b.height){camera.aspect=b.width/b.height;if(detailedCase(m)&&$('#space').dataset.view==='best')camera.fov=overviewFov(bestView(m).fov,camera.aspect);else if(closeKind&&$('#space').dataset.view==='detail')camera.fov=camera.aspect<1?2*Math.atan(Math.tan(35*Math.PI/360)/camera.aspect)*180/Math.PI:detailView(m,closeKind).fov;camera.updateProjectionMatrix();$('#space').dataset.fov=String(camera.fov);updateScale();viewer.resize();viewer.setCamera(camera);requestDraw();}}
  if(panoRender&&panoCamera){const b=$('#pano').getBoundingClientRect();if(b.width&&b.height){panoRender.setSize(b.width,b.height);panoCamera.aspect=b.width/b.height;panoCamera.updateProjectionMatrix();drawPano();}}
 }
 async function loadSpace(){
@@ -72,7 +74,7 @@ async function loadSpace(){
   // Let the first asynchronous splat sort settle before exposing a black frame.
   await Promise.race([viewer.waitForRenderOver(250),new Promise(resolve=>setTimeout(resolve,3500))]);
   if(mode==='space'){$('#waiting').hidden=true;$('#controls').hidden=false;}
-  $('#elapsed').textContent='';completeBest();if(parent!==window)parent.postMessage({type:'pensieve-world-ready'},location.origin);
+  for(const id of ['close-carving','close-basin','close-crystal'])$('#'+id).disabled=false;$('#elapsed').textContent='';completeBest();if(parent!==window)parent.postMessage({type:'pensieve-world-ready'},location.origin);
  }catch(e){if(parent!==window)parent.postMessage({type:'pensieve-world-error'},location.origin);viewer?.destroy();viewer=null;loaded=false;delete $('#space').dataset.loaded;lastScale=-1;if(mode==='space')waiting('3D 空间暂未打开',e.message||'可先切到流畅全景查看。');}finally{loading=false;}
 }
 function drawPano(){if(!panoReady||mode!=='pano'||!visible||document.hidden)return;const c=Math.cos(pitch);panoCamera.lookAt(c*Math.sin(yaw-Math.PI/2),Math.sin(pitch),-c*Math.cos(yaw-Math.PI/2));panoRender.render(panoScene,panoCamera);}
@@ -95,6 +97,8 @@ function switchMode(next){
 }
 for(const n of ['space','pano','original'])$('#tab-'+n).onclick=()=>switchMode(n);
 $('#best-view').onclick=applyBest;$('#reset').onclick=applyBest;
+function applyClose(kind){switchMode('space');const preset=detailView(m,kind);if(!preset||!camera)return;closeKind=kind;origin=[...preset.eye];eye=[...origin];yaw=preset.yaw;pitch=preset.pitch;const b=$('#space').getBoundingClientRect(),aspect=b.width/Math.max(b.height,1);camera.fov=aspect<1?2*Math.atan(Math.tan(35*Math.PI/360)/aspect)*180/Math.PI:preset.fov;camera.updateProjectionMatrix();$('#space').dataset.view='detail';announce(preset.hint);look();}
+$('#close-carving').onclick=()=>applyClose('carving');$('#close-basin').onclick=()=>applyClose('basin');$('#close-crystal').onclick=()=>applyClose('crystal');
 let prevX=0,prevY=0;
 for(const el of [$('#space'),$('#pano')]){
  el.addEventListener('pointerdown',e=>{dragging=true;prevX=e.clientX;prevY=e.clientY;el.setPointerCapture(e.pointerId);updateScale();});

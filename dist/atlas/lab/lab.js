@@ -1,7 +1,7 @@
-import {reviewFor} from './quality.js?v=20261027-v3';
+import {reviewFor} from './quality.js?v=20261027-daylight-detail-final';
 const $=s=>document.querySelector(s);
 const initialParams=new URLSearchParams(location.search),initialCase=initialParams.get('case');
-let selected=document.querySelector(`[data-case="${CSS.escape(initialCase||'')}"]`)?initialCase:'stone-hall-multiview-v3',mode=(['space','pano'].includes(initialParams.get('view'))||(!initialParams.has('view')&&selected==='stone-hall-multiview-v3'))?'world':'input',worldMode=initialParams.get('view')==='pano'?'pano':'space',index=0,items=[],frame=null,frameCase='',image=null;
+let selected=document.querySelector(`[data-case="${CSS.escape(initialCase||'')}"]`)?initialCase:'stone-hall-detail-v1',mode=(['space','pano'].includes(initialParams.get('view'))||(!initialParams.has('view')&&['stone-hall-multiview-v3','stone-hall-detail-v1'].includes(selected)))?'world':'input',worldMode=initialParams.get('view')==='pano'?'pano':'space',index=0,items=[],frame=null,frameCase='',image=null;
 let pendingBest=false,requestId=0,feedbackTimer;
 function feedback(text){$('#view-feedback').textContent=text;}
 function sendBest(){if(pendingBest)command('pensieve-best-view',{requestId});}
@@ -19,7 +19,7 @@ function render(){
  const showWorld=mode==='world'&&m?.status==='ready';image.hidden=showWorld;
  if(showWorld){
   if(!frame){
-   const created=document.createElement('iframe');frame=created;frameCase=selected;created.dataset.case=selected;created.src=`/world/?id=${m.id}&experiment=1&embed=1&v=20261027-overview-detail-2${worldMode==='pano'?'&view=pano':''}`;created.title=m.name;created.allowFullscreen=true;
+   const created=document.createElement('iframe');frame=created;frameCase=selected;created.dataset.case=selected;created.src=`/world/?id=${m.id}&experiment=1&embed=1&v=20261027-daylight-detail-final${worldMode==='pano'?'&view=pano':''}`;created.title=m.name;created.allowFullscreen=true;
    created.onload=()=>{if(frame!==created)return;command('pensieve-world-visibility',{visible:mode==='world'});command('pensieve-world-mode',{mode:worldMode});sendBest();};stage.append(created);
   }
   frame.hidden=false;command('pensieve-world-visibility',{visible:true});command('pensieve-world-mode',{mode:worldMode});
@@ -48,4 +48,4 @@ addEventListener('message',e=>{
  if(e.data?.type==='pensieve-world-error'){pendingBest=false;clearTimeout(feedbackTimer);feedback('模型打开失败，未完成定位。可以重试或查看输入图像。');}
 });
 addEventListener('pagehide',disposeFrame);addEventListener('pageshow',e=>{if(e.persisted)render();});
-async function poll(){let pending=true;try{const r=await fetch('/api/experiments',{signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error();const d=await r.json();items=d.items;if(!initialCase&&!items.some(x=>x.case===selected)){selected='stone-hall-daylight-v1';}$('#budget').textContent=`本轮 ${d.attempts} / ${d.limit} 次`;pending=items.some(x=>!['ready','failed','uncertain','paused'].includes(x.status));render();}catch{$('#task-state').textContent='状态暂未连接，稍后自动重试';}finally{if(pending)setTimeout(poll,12000);}}document.querySelectorAll('[data-case]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.case===selected)));poll();
+async function poll(){let pending=true;try{const r=await fetch('/api/experiments',{signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error();const d=await r.json();items=d.items;if(!initialCase&&!items.some(x=>x.case===selected)){selected=items.some(x=>x.case==='stone-hall-multiview-v3')?'stone-hall-multiview-v3':'stone-hall-daylight-v1';}$('#budget').textContent=`本轮 ${d.attempts} / ${d.limit} 次`;pending=items.some(x=>!['ready','failed','uncertain','paused'].includes(x.status));render();}catch{$('#task-state').textContent='状态暂未连接，稍后自动重试';}finally{if(pending)setTimeout(poll,12000);}}document.querySelectorAll('[data-case]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.case===selected)));poll();

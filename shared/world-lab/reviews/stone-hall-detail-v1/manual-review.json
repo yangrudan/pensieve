@@ -1,0 +1,32 @@
+{
+  "case": "stone-hall-detail-v1",
+  "world_id": "3FO4K4QHK5SG",
+  "verdict": "Five crystals and one basin visible in overview; carved plinth and basin patterns readable; fine texture remains softened.",
+  "views": [
+    "front",
+    "left-0.6",
+    "right-0.6",
+    "forward-0.6",
+    "back",
+    "overview",
+    "carving-close",
+    "basin-close",
+    "crystal-close"
+  ],
+  "limitations": [
+    "Inspected views only, not every possible position",
+    "Fine limestone pores and microfractures softer than native scene",
+    "No physical changing refraction in cached 3DGS",
+    "Not integrated with location-memory interactions"
+  ],
+  "default_view": {
+    "eye": [
+      3.78,
+      0,
+      1.0
+    ],
+    "yaw": 3.141592653589793,
+    "pitch": -0.32,
+    "fov": 65
+  }
+}

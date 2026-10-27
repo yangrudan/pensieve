@@ -117,6 +117,29 @@
         "format": "spz",
         "up_axis": "Z"
       }
+    },
+    {
+      "id": "90f1d69bc54dce80ef1ba21527994d22435558e2202e1ed772b3f09171458898",
+      "case": "stone-hall-detail-v1",
+      "experimental": true,
+      "mode": "world",
+      "world_method": "reconstruction",
+      "input_count": 80,
+      "name": "日光大厅 · 80视角雕刻与材质细节重建",
+      "source": "AHOLO World",
+      "version": "Reconstruction",
+      "created_at": 1793102032.1500444,
+      "status": "ready",
+      "message": "World 记忆空间已就绪",
+      "photo_url": "/lab-inputs/stone-hall-detail-v1/view-00.jpg",
+      "world_id": "3FO4K4QHK5SG",
+      "progress": 1,
+      "completed_at": 1793102554.6852856,
+      "world_assets": {
+        "splat_url": "/world-assets/90f1d69bc54dce80ef1ba21527994d22435558e2202e1ed772b3f09171458898/space.spz",
+        "format": "spz",
+        "up_axis": "Z"
+      }
     }
   ]
 }
