@@ -1,5 +1,7 @@
 # 冥想盆 · The Pensieve
 
+完整创意、章节、生成资产与调试过程见 [《记忆之处》项目报告](PROJECT_REPORT.md)。启动服务后可打开 [图文阅读版](http://localhost:4174/report/)，也可下载 [Word](dist/report/记忆之处-项目报告.docx)、[同目录 Markdown](dist/report/记忆之处-项目报告.md) 或 [兼容版 PDF](dist/report/记忆之处-项目报告-兼容版.pdf)。
+
 选择照片 → 魔杖银丝注入水面 → 触碰水面潜入记忆 → 查看原片或 AHOLO 立体结果。
 
 ## 运行
@@ -52,7 +54,7 @@ python3 -m venv .venv
 
 - `v0.1.0`：原始可运行版本快照；`v0.2.0`：魔法场景、潜入过渡、记忆碎片、空间内嵌及四视图研究路线。
 - `v0.3.0`：新增第二章星石之境、地点管理、跨章节记忆标签与本地原片归档。
-- 本地 Git 管理；私人照片、生成模型、实验记录和密钥不进入仓库。
+- Git 保存代码与筛选后的非私人大厅实验资源；私人照片、个人生成模型、私人运行记录和密钥不进入仓库。
 - 场景背景由内置图像生成工具制作，已转为本地 WebP；完整提示词在 [memory-chamber-prompt.txt](dist/assets/memory-chamber-prompt.txt)。实时水面、银丝、烛光及符文由 Three.js 渲染。
 - [AHOLO 探索结果与边界](AHOLO_EXPLORATION.md)：记录早期 7 / 10 次提交，含去人物空间和四视图物件实测。
 
@@ -107,13 +109,13 @@ World 数据保存在 `.runtime/<memory-id>/`，包括空间 SPZ 或 PLY、全�
 
 实验不加入 `/api/memories` 的个人记忆列表，也不修改地点标签。结果通过 `/world/?id=<id>&experiment=1` 查看；查看与查询不创建新任务。
 
-生成图像及完整提示词：[stone-world-prompts.md](dist/assets/stone-world-prompts.md)。私有运行状态、24 张输入图、相机位姿和平台返回仍不提交 Git。
+生成图像及完整提示词：[stone-world-prompts.md](dist/assets/stone-world-prompts.md)。私有运行状态与供应商原始回执不提交 Git；筛选后的非私人输入、相机数据与模型经 `shared/world-lab/` 单独归档。
 
 实际返回与质量评估：[WORLD_EXPERIMENTS.md](WORLD_EXPERIMENTS.md)。
 
 ### Mac mini / 多机器查看实验
 
-四组 AI 大厅实验现随私密仓库保存于 `shared/world-lab/`（约 45 MB）。另一台机器执行 `git pull --ff-only` 并重启 Python 服务后，可直接打开 `/atlas/lab/`。无需重新生成，也不要复制覆盖 `.runtime/state.json`。
+六组非私人大厅实验现随仓库保存于 `shared/world-lab/`，包含已归档输入、SPZ 与检查证据。另一台机器执行 `git pull --ff-only` 并重启 Python 服务后，可直接打开 `/atlas/lab/`。无需重新生成，也不要复制覆盖 `.runtime/state.json`。
 
 服务端将这些已完成实验作为只读资源加载，保留本机生成的记忆、地点标签与额度计数；同 ID 或同 case 的本机实验优先。个人照片和模型仍不提交 Git，不会自动跨机器同步。资源范围与加载规则见 [共享实验说明](shared/world-lab/README.md)。
 

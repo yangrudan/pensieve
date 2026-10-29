@@ -1,0 +1,54 @@
+{
+  "report_date": "2026-10-28",
+  "baseline": "v0.6.0-daylight-detail",
+  "experiments": [
+    {
+      "case": "stone-hall-reference-v1",
+      "world_method": "generation",
+      "input_count": 1,
+      "created_at": 1792581976.5296834,
+      "completed_at": 1792582880.5662074,
+      "status": "ready"
+    },
+    {
+      "case": "stone-hall-multiview-v1",
+      "world_method": "reconstruction",
+      "input_count": 24,
+      "created_at": 1792582355.9470751,
+      "completed_at": 1792583188.357783,
+      "status": "ready"
+    },
+    {
+      "case": "stone-hall-multiview-v2",
+      "world_method": "reconstruction",
+      "input_count": 24,
+      "created_at": 1792584086.3710835,
+      "completed_at": 1792584460.7313445,
+      "status": "ready"
+    },
+    {
+      "case": "stone-hall-daylight-v1",
+      "world_method": "generation",
+      "input_count": 1,
+      "created_at": 1792639062.9698215,
+      "completed_at": 1792639846.8244224,
+      "status": "ready"
+    },
+    {
+      "case": "stone-hall-multiview-v3",
+      "world_method": "reconstruction",
+      "input_count": 72,
+      "created_at": 1793091339.827581,
+      "completed_at": 1793091889.013919,
+      "status": "ready"
+    },
+    {
+      "case": "stone-hall-detail-v1",
+      "world_method": "reconstruction",
+      "input_count": 80,
+      "created_at": 1793102032.1500444,
+      "completed_at": 1793102554.6852856,
+      "status": "ready"
+    }
+  ]
+}
