@@ -27,7 +27,7 @@ with sync_playwright() as p:
     page.route('**/api/**',intercept)
     page.goto('http://127.0.0.1:4174/',wait_until='domcontentloaded')
     page.wait_for_timeout(2200);page.screenshot(path=str(OUT/'chapter-1.png'));print('Captured chapter 1',flush=True)
-    page.goto('http://127.0.0.1:4174/atlas/hybrid/',wait_until='domcontentloaded')
+    page.goto('http://127.0.0.1:4174/atlas/',wait_until='domcontentloaded')
     page.locator('#atlas-scene[data-ready=true]').wait_for(timeout=120000)
     page.wait_for_timeout(1000);page.screenshot(path=str(OUT/'chapter-2.png'));print('Captured chapter 2',flush=True)
     page.goto('http://127.0.0.1:4174/aha/',wait_until='domcontentloaded')
