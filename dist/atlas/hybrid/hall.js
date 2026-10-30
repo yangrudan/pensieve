@@ -1,9 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
-import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { setupMemoryLinker } from './linker.js?v=20261022-3';
-import { createCrystalGeometry,createCrystalEnvironment,createLuxCrystalMaterial,LUX_TARGET_HEIGHT,LUX_GRADE,CRYSTAL_SHAPES,crystalShapeForPlace } from './crystal.js?v=20261030-4';
-import { CRYSTAL_MODELS } from '../crystal-lab/catalog.js?v=20261030-1';
+import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES,crystalShapeForPlace } from './crystal.js?v=20261030-4';
 
 // Mesh owns all navigable structure and clickable landmarks. Cached AHOLO
 // panoramas provide environmental illumination, never duplicate GS geometry.
@@ -86,36 +84,12 @@ export function createRealm(onSelect){
  const glowCanvas=document.createElement('canvas');glowCanvas.width=128;glowCanvas.height=128;const ctx=glowCanvas.getContext('2d'),gradient=ctx.createRadialGradient(64,64,0,64,64,64);gradient.addColorStop(0,'#ffffffaa');gradient.addColorStop(.25,'#ffffff33');gradient.addColorStop(1,'#ffffff00');ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);const glowMap=new THREE.CanvasTexture(glowCanvas);
  function position(i){const positions=[[-6,0,1],[-3.5,0,-3.2],[0,0,-5],[3.5,0,-3.2],[6,0,1]];if(i<5)return new THREE.Vector3(...positions[i]);const a=(i-5)/7*Math.PI*1.65+.55;return new THREE.Vector3(Math.sin(a)*10,0,Math.cos(a)*10);}
  const gemGeometries=Object.fromEntries(CRYSTAL_SHAPES.map(shape=>[shape,createCrystalGeometry(shape)])),sharedGeometry=new Set([...Object.values(gemGeometries),pedestalFoot,pedestalBody,pedestalCap]),crystalEnvironment=createCrystalEnvironment(renderer);
- const glbLoader=new GLTFLoader(),luxGeometry=new Map(),luxSeq={};
- function clearNodes(){nodeRoot.traverse(n=>{if(n.material)for(const material of Array.isArray(n.material)?n.material:[n.material])if(![stone,darkStone,gold].includes(material))material.dispose();if(n.geometry&&!sharedGeometry.has(n.geometry)&&!luxGeometry.has(n.geometry.uuid))n.geometry.dispose();});scene.remove(nodeRoot);nodeRoot=new THREE.Group();scene.add(nodeRoot);nodes=[];labels.replaceChildren();}
-
- // The real AHOLO Lux3D mesh for a place, if one was generated for it. The GLB geometry is
- // fetched once per design and shared between stands; each stand gets its own material so
- // the per-stone colour grade stays separate. Falls back to the procedural gem on failure.
- async function luxCrystal(place,shape){
-  const design=CRYSTAL_MODELS.find(x=>x.place_id===place.id)||CRYSTAL_MODELS.find(x=>x.shape===shape);
-  if(!design)return null;
-  let geometry=luxGeometry.get(design.model_id);
-  if(!geometry){
-   const gltf=await glbLoader.loadAsync(`/crystal-models/${design.model_id}.glb`);
-   let source;gltf.scene.traverse(n=>{if(!source&&n.isMesh)source=n;});if(!source)throw Error('no mesh in '+design.model_id);
-   geometry=source.geometry;geometry.computeBoundingBox();luxGeometry.set(design.model_id,geometry);luxGeometry.set(geometry.uuid,design.model_id);
-   geometry.userData.luxBase={map:source.material.map||null,normalMap:source.material.normalMap||null,normalScale:source.material.normalScale?.clone(),side:source.material.side};
-  }
-  const box=geometry.boundingBox,k=(LUX_TARGET_HEIGHT[shape]||2.4)/(box.max.y-box.min.y);
-  const crystal=new THREE.Mesh(geometry,createLuxCrystalMaterial(geometry.userData.luxBase,place.color,crystalEnvironment.texture,{transmission:0,scale:k,glow:.16,grade:LUX_GRADE[shape]}));
-  crystal.scale.setScalar(k);crystal.position.set(-(box.min.x+box.max.x)/2*k,-box.min.y*k,-(box.min.z+box.max.z)/2*k);
-  crystal.castShadow=false;crystal.receiveShadow=false;
-  const holder=new THREE.Group();holder.add(crystal);holder.userData.shape=shape;holder.userData.source='aholo-lux3d';
-  return holder;
- }
+ function clearNodes(){nodeRoot.traverse(n=>{if(n.material)for(const material of Array.isArray(n.material)?n.material:[n.material])if(![stone,darkStone,gold].includes(material))material.dispose();if(n.geometry&&!sharedGeometry.has(n.geometry))n.geometry.dispose();});scene.remove(nodeRoot);nodeRoot=new THREE.Group();scene.add(nodeRoot);nodes=[];labels.replaceChildren();}
  function setPlaces(places,counts){
-  clearNodes();const seq=++luxSeq.loading||1;luxSeq.loading=seq;places.forEach((place,i)=>{const pos=position(i),group=new THREE.Group();group.position.copy(pos);nodeRoot.add(group);
+  clearNodes();places.forEach((place,i)=>{const pos=position(i),group=new THREE.Group();group.position.copy(pos);nodeRoot.add(group);
    mesh(pedestalFoot,darkStone,group,0,.12,0);mesh(pedestalBody,stone,group,0,.7,0);mesh(pedestalCap,gold,group,0,1.29,0);
    const gemGroup=new THREE.Group();gemGroup.position.y=1.5;gemGroup.userData.placeId=place.id;group.add(gemGroup);
-   const shape=crystalShapeForPlace(place.id);
-   let gem=new THREE.Mesh(gemGeometries[shape],new THREE.MeshPhysicalMaterial({color:place.color,metalness:0,roughness:.2,envMap:crystalEnvironment.texture,envMapIntensity:.6,clearcoat:.8}));gem.userData.source='placeholder';gemGroup.add(gem);gem.rotation.y=shape==='heart'?.12:i*.42;
-   luxCrystal(place,shape).then(real=>{if(luxSeq.loading!==seq||disposed||!real)return;gemGroup.remove(gem);if(gem.userData.source==='placeholder')gem.material.dispose();gem=real;gemGroup.add(gem);gem.rotation.y=shape==='heart'?.12:i*.42;dirty=true;}).catch(()=>{});
+   const shape=crystalShapeForPlace(place.id),gem=createCrystal(place.color,crystalEnvironment.texture,gemGeometries[shape],shape);gemGroup.add(gem);gem.rotation.y=shape==='heart'?.12:i*.42;
    const aura=new THREE.Sprite(new THREE.SpriteMaterial({map:glowMap,color:place.color,transparent:true,opacity:.12,blending:THREE.AdditiveBlending,depthWrite:false}));aura.position.y=2.15;aura.scale.set(2.7,2.7,1);group.add(aura);
    const marker=ring(.9,.025,.03,new THREE.MeshBasicMaterial({color:place.color,transparent:true,opacity:.6}),group);
    const symbol=mesh(new THREE.TorusGeometry(.24,.012,5,32),gold,group,0,.73,.715);symbol.rotation.y=.05;

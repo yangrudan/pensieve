@@ -1,5 +1,5 @@
 import { atlasRequest } from '../places.js';
-import { createRealm } from './hybrid/hall.js?v=20261030-4';
+import { createRealm } from './hybrid/hall.js?v=20261030-5';
 import { showView, clearViewer } from './viewer.js';
 import { crystalShapeForPlace } from './hybrid/crystal.js?v=20261030-4';
 const $=s=>document.querySelector(s);let data,memories=[],selected=null,editing=null,currentMemory=null;
