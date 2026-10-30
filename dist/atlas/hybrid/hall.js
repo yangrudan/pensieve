@@ -1,7 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
 import { setupMemoryLinker } from './linker.js?v=20261022-3';
-import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES,crystalShapeForPlace } from './crystal.js?v=20261022-4';
+import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES,crystalShapeForPlace } from './crystal.js?v=20261029-6';
 
 // Mesh owns all navigable structure and clickable landmarks. Cached AHOLO
 // panoramas provide environmental illumination, never duplicate GS geometry.

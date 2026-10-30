@@ -83,6 +83,41 @@ export function createCrystalMaterial(color,environment){
  });
 }
 
+// On-screen height of each real Lux3D crystal, matched to the procedural stand-ins.
+export const LUX_TARGET_HEIGHT={quartz:2.6,cluster:2.3,diamond:1.9,heart:2.15,ice:2.8};
+
+// Browser-side display finish for a Lux3D GLB material. The returned mesh and
+// albedo texture are the API's; only the optics (transmission, reflections) are
+// adjusted. Baked reflections inside the albedo are softened, not removed.
+export const LUX_LOOK={transmission:.3,attenuationDistance:1.1,envMapIntensity:1.35};
+// Per-stone grade, from the measured saturation of each albedo over its used UV area
+// (emerald .90, amber .98 are already rich; amethyst .35, ice .34, rose .45 are pale).
+// `saturation` scales chroma, `gain` scales brightness; both are shader uniforms, so all
+// five stones still share one compiled program.
+export const LUX_GRADE={quartz:{saturation:1.0,gain:1.2},cluster:{saturation:2.0,gain:1.0},diamond:{saturation:1.0,gain:1.0},heart:{saturation:1.7,gain:.95},ice:{saturation:2.3,gain:.88}};
+export function createLuxCrystalMaterial(base,color,environment,{transmission=LUX_LOOK.transmission,scale=1,glow=0,grade=LUX_GRADE.quartz}={}){
+ const next=createCrystalMaterial(color,environment);
+ // The API albedo already carries the stone's colour and facet pattern, so it is kept at full
+ // strength (a washed-out albedo leaves nothing for transmission to tint). Light that passes
+ // through is tinted by the stone colour; transmission is kept low so the body stays saturated.
+ next.map=base.map||null;next.color.set(0xffffff);
+ next.normalMap=base.normalMap||null;if(base.normalScale)next.normalScale.copy(base.normalScale);
+ next.transmission=transmission;next.thickness=.45/Math.max(scale,.0001);
+ next.ior=1.55;next.roughness=.05;next.clearcoat=1;next.clearcoatRoughness=.03;next.dispersion=.04;
+ next.attenuationColor.set(color);next.attenuationDistance=LUX_LOOK.attenuationDistance;next.envMapIntensity=LUX_LOOK.envMapIntensity;next.side=base.side;
+ // Dim rooms: lift the stone's own albedo (not a flat colour) so facets keep their pattern.
+ if(glow>0&&base.map){next.emissive.set(0xffffff);next.emissiveMap=base.map;next.emissiveIntensity=glow;}
+ const uniforms={luxSaturation:{value:grade.saturation},luxGain:{value:grade.gain}};
+ next.userData.luxUniforms=uniforms;
+ next.onBeforeCompile=shader=>{
+  Object.assign(shader.uniforms,uniforms);
+  shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform float luxSaturation;\nuniform float luxGain;')
+   .replace('#include <map_fragment>','#include <map_fragment>\n float luxLuma = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));\n diffuseColor.rgb = clamp(mix(vec3(luxLuma), diffuseColor.rgb, luxSaturation) * luxGain, 0.0, 1.0);');
+ };
+ next.customProgramCacheKey=()=> 'aholo-lux-grade-v4';
+ return next;
+}
+
 function cutCrystal(color,environment,geometry,shape='quartz'){
  const group=new THREE.Group(),shell=new THREE.Mesh(geometry,createCrystalMaterial(color,environment));
  shell.castShadow=false;group.add(shell);

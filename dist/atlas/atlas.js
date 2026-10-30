@@ -1,7 +1,7 @@
 import { atlasRequest } from '../places.js';
-import { createRealm as createIslandRealm } from './realm.js';
-const createRealm=document.body.dataset.realm==='hybrid'?(await import('./hybrid/hall.js?v=20261022-6')).createRealm:createIslandRealm;
+import { createRealm } from './hybrid/hall.js?v=20261029-8';
 import { showView, clearViewer } from './viewer.js';
+import { crystalShapeForPlace } from './hybrid/crystal.js?v=20261029-6';
 const $=s=>document.querySelector(s);let data,memories=[],selected=null,editing=null,currentMemory=null;
 const realm=createRealm(selectPlace);
 function members(pid){return memories.filter(m=>(data.assignments[m.id]||[]).includes(pid));}
@@ -17,6 +17,9 @@ function editor(place=null){editing=place?.id||null;$('#editor-title').textConte
 $('#add-place').onclick=()=>editor();$('#edit-place').onclick=()=>editor(data.places.find(p=>p.id===selected));$('#cancel-editor').onclick=()=>$('#place-editor').close();$('#place-editor').addEventListener('close',()=>realm.setPaused(false));
 $('#place-form').onsubmit=async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;try{data=await atlasRequest({action:'place',id:editing,name:$('#place-input').value.trim(),color:$('#color-input').value});render();$('#place-editor').close();if(selected)realm.focus(selected);}catch(error){$('#editor-error').textContent=error.message;}finally{button.disabled=false;}};
 function openMemory(m){currentMemory=m;$('#viewer-name').textContent=m.name;$('#view-3d').hidden=!(m.status==='ready'&&(m.model_url||m.world_assets?.splat_url));$('#memory-dialog').showModal();realm.setPaused(true);showView(m,$('#view-3d').hidden?'photo':'3d');}
+let closeLux=()=>{};
+async function openLux(){const p=data?.places.find(x=>x.id===selected);if(!p)return;$('#lux-title').textContent=`${p.name} · AHOLO 魔法水晶`;$('#lux-dialog').style.setProperty('--stone',p.color);$('#lux-dialog').showModal();realm.setPaused(true);const {openLuxViewer}=await import('./lux-viewer.js?v=20261029-1');if(!$('#lux-dialog').open)return;closeLux();closeLux=openLuxViewer($('#lux-content'),{shape:crystalShapeForPlace(p.id),color:p.color},$('#lux-status'));}
+$('#open-lux').onclick=openLux;$('#close-lux').onclick=()=>$('#lux-dialog').close();$('#lux-dialog').addEventListener('close',()=>{closeLux();closeLux=()=>{};realm.setPaused(false);});
 $('#close-memory').onclick=()=>$('#memory-dialog').close();$('#memory-dialog').addEventListener('close',()=>{clearViewer();realm.setPaused(false);});$('#view-photo').onclick=()=>showView(currentMemory,'photo');$('#view-3d').onclick=()=>showView(currentMemory,'3d');addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&selected)closePlace();});
 async function load(){try{const [atlas,response]=await Promise.all([atlasRequest(),fetch('/api/memories')]);if(!response.ok)throw Error('记忆服务暂未连接');const result=await response.json();data=atlas;memories=[...result.items.filter(m=>m.mode!=='fourview'),...atlas.archives];render();$('#atlas-status').textContent='';}catch(e){$('#atlas-status').textContent=e.message;$('#atlas-total').textContent='暂时无法读取记忆，请刷新重试';}}
 addEventListener('pensieve-atlas-updated',load);load();addEventListener('pageshow',e=>{if(e.persisted)load();});
