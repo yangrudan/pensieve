@@ -1,7 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { CRYSTAL_MODELS } from './catalog.js?v=20261022-1';
-import { createCrystalMaterial } from '../hybrid/crystal.js?v=20261022-4';
+import { createLuxCrystalMaterial,LUX_GRADE } from '../hybrid/crystal.js?v=20261029-6';
 
 // Read-only job polling. Opening this page never starts or resumes generation.
 export function watchGeneratedCrystal({scene,environment,canvas,changed,status}){
@@ -35,19 +35,11 @@ export function watchGeneratedCrystal({scene,environment,canvas,changed,status})
    if(mode==='original')mesh.material=original;
    else{
     if(!polished.has(mesh)){
+     // Shared with the memory hall: keeps the API texture as surface detail while
+     // reducing its baked absorption so transmitted light is not multiplied to black.
      const finish=base=>{
-      const next=createCrystalMaterial(design.color,environment);
-      next.map=base.map||null;if(base.color)next.color.copy(base.color);
-      next.normalMap=base.normalMap||null;if(base.normalScale)next.normalScale.copy(base.normalScale);
-      next.transmission=Number(clarity.value)/100;
       const worldScale=mesh.getWorldScale(new THREE.Vector3());
-      next.thickness=.32/Math.max(worldScale.x,worldScale.y,worldScale.z,.0001);
-      next.ior=1.52;next.roughness=.035;next.clearcoatRoughness=.02;next.attenuationDistance=3.5;next.side=base.side;
-      // Keep the API texture as surface detail, while reducing its baked green
-      // absorption so transmitted light is not multiplied into near-black.
-      next.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n diffuseColor.rgb = mix(vec3(1.0), diffuseColor.rgb, 0.65);');};
-      next.customProgramCacheKey=()=> 'aholo-clear-texture-v2';
-      return next;
+      return createLuxCrystalMaterial(base,design.color,environment,{transmission:Number(clarity.value)/100,scale:Math.max(worldScale.x,worldScale.y,worldScale.z),grade:LUX_GRADE[design.shape]});
      };
      polished.set(mesh,Array.isArray(original)?original.map(finish):finish(original));
     }

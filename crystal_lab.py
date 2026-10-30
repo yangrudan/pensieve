@@ -1,7 +1,11 @@
 """Fixed text-to-3D crystal designs; shared quota and idempotency live in server."""
 import hashlib
 import json
+import re
 import time
+
+SHARED='shared/lux3d-crystals'
+_VERIFIED={}
 
 CASE='emerald-quartz-lux-v1'
 PROMPT='''A single exquisite emerald green magical quartz crystal, isolated standalone object.
@@ -43,6 +47,39 @@ def prototype(case):
     settings={'case':case,'prompt':item['prompt'],'version':'G1','face_count':item['face_count'],'method':'text_to_3d'}
     mid=hashlib.sha256(json.dumps(settings,sort_keys=True).encode()).hexdigest()
     return mid,{**settings,**{key:item[key] for key in ('key','name','place_id','color','shape')}}
+
+def bundled_items(root):
+    """Published Lux3D crystals as read-only ready records.
+
+    An entry is served only if it names a fixed catalog design, carries that
+    design's deterministic id, and its file matches the recorded size and
+    SHA-256. Nothing here is written to personal state or counted as a spend.
+    """
+    folder=root/SHARED;index=folder/'index.json'
+    if not index.is_file():return []
+    try:entries=json.loads(index.read_text())['items']
+    except (ValueError,KeyError,TypeError,OSError):return []
+    designs={item['case']:item for item in CATALOG};found=[]
+    for entry in entries:
+        design=designs.get(entry.get('case')) if isinstance(entry,dict) else None
+        if not design:continue
+        mid,settings=prototype(design['case']);file=folder/f'{mid}.glb'
+        if entry.get('id')!=mid or not re.fullmatch(r'[a-f0-9]{64}',str(entry.get('sha256',''))) or not file.is_file():continue
+        stat=file.stat();stamp=(stat.st_mtime_ns,stat.st_size)
+        if stat.st_size!=entry.get('bytes'):continue
+        if _VERIFIED.get(file)!=stamp:
+            if hashlib.sha256(file.read_bytes()).hexdigest()!=entry['sha256']:continue
+            _VERIFIED[file]=stamp
+        found.append({'id':mid,'experimental':True,'case':design['case'],'mode':'lux3d','generation_method':'text_to_3d',
+            'name':design['name']+' · Lux3D','source':'AHOLO Lux3D · 文生 3D','version':'G1','face_count':settings['face_count'],
+            'status':'ready','message':'随仓库发布的 Lux3D 水晶（贴图已压缩，网格未改动）','task_id':entry.get('task_id') or None,
+            'model_url':f'/models/{mid}.glb'})
+    return found
+
+def bundled_model(root,mid):
+    """Path of a published crystal GLB, or None unless it passed bundled_items()."""
+    if not isinstance(mid,str) or not any(item['id']==mid for item in bundled_items(root)):return None
+    return root/SHARED/f'{mid}.glb'
 
 def verify_rejected_retry(item,history,known_ids,now=None):
     """Operator-observed BusinessError only; reconcile a complete provider list."""

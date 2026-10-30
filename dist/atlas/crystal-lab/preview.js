@@ -1,7 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
-import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES } from '../hybrid/crystal.js?v=20261022-4';
-import { watchGeneratedCrystal } from './generated.js?v=20261022-5';
+import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES } from '../hybrid/crystal.js?v=20261029-6';
+import { watchGeneratedCrystal } from './generated.js?v=20261029-6';
 
 function start(){
  const canvas=document.querySelector('#crystal-scene'),stage=canvas.parentElement,status=document.querySelector('#preview-status');

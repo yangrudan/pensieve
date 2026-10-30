@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "key": "emerald",
+      "case": "emerald-quartz-lux-v1",
+      "id": "86ee2204fe016c9a2c34c339c148e0f8b334a4409db3e610565254614bef5e9c",
+      "task_id": "4276230",
+      "version": "G1",
+      "requested_faces": 50000,
+      "triangles": 49516,
+      "source_bytes": 4586724,
+      "source_sha256": "c062d6e45ceaa6d17b612f82f078be1a95227abbc472b26868776332450a6da1",
+      "bytes": 1613108,
+      "sha256": "848bf63b315d295e4465e10e2a7d68878f6bb65fc4cc64daa68724ea5a7d3b75",
+      "geometry_sha256": "d35938c7c7d410b9b58bce7f287f21effa89fc6e8bf05d965d59eaa071d575d5",
+      "textures": "baseColor 1024 px JPEG q90; metallicRoughness 512 px JPEG q88 (originals: 2048 px PNG)"
+    },
+    {
+      "key": "amethyst",
+      "case": "amethyst-cluster-lux-v1",
+      "id": "34fe3d026363bc5b41681d92d30f455d39e485dfac3083b20d068a0b77f75dbd",
+      "task_id": "4277834",
+      "version": "G1",
+      "requested_faces": 20000,
+      "triangles": 19174,
+      "source_bytes": 6291440,
+      "source_sha256": "058fc33b92a56cc496bb6be3bacd0659fba0a6eca9a79faa4f10aa2c0ba98bbe",
+      "bytes": 1104612,
+      "sha256": "83171c5bcd5a6dfd03f11969e79e51e3bbfcb114fed1f31e85ac3710d82bd921",
+      "geometry_sha256": "3265c23509044816e0572891f5e3b12ae0d1eada12a9d3b8679f8515b1eed470",
+      "textures": "baseColor 1024 px JPEG q90; metallicRoughness 512 px JPEG q88 (originals: 2048 px PNG)"
+    },
+    {
+      "key": "amber",
+      "case": "amber-diamond-lux-v1",
+      "id": "ac2577a788fcc35997c2a5467541d7728ef823faf6d8088274836f0ba2cd7304",
+      "task_id": "4277378",
+      "version": "G1",
+      "requested_faces": 20000,
+      "triangles": 19167,
+      "source_bytes": 2232372,
+      "source_sha256": "a727435effe912e679a6be4eeb7d6a3b213d5568cdbc92b66f140b248654db3d",
+      "bytes": 656204,
+      "sha256": "e2009e5977a528266bd04dc8309ea982c95dfe01a3b914c009833070d7a593e0",
+      "geometry_sha256": "fc362e2b64a7d919fe337089e443906f166289488cd4b9ebfb24e675a259392d",
+      "textures": "baseColor 1024 px JPEG q90; metallicRoughness 512 px JPEG q88 (originals: 2048 px PNG)"
+    },
+    {
+      "key": "rose",
+      "case": "rose-heart-lux-v1",
+      "id": "c55e812e8198d6ed187d3aaba9f1b64c57f79505dbf15d547a8a495955c3547a",
+      "task_id": "4277389",
+      "version": "G1",
+      "requested_faces": 20000,
+      "triangles": 19682,
+      "source_bytes": 3238200,
+      "source_sha256": "dfcbc2619436bb865adfda99445ef00694274ace883575b6b533cb141693eaec",
+      "bytes": 789628,
+      "sha256": "cd2604d5bb3f6f5bb60a54b77f45337266d91c6a57f20e23b512fc69a9561357",
+      "geometry_sha256": "20317631d445ac0e8836316b5414250191759f2179ffcb8014edcb207fff6b8d",
+      "textures": "baseColor 1024 px JPEG q90; metallicRoughness 512 px JPEG q88 (originals: 2048 px PNG)"
+    },
+    {
+      "key": "ice",
+      "case": "ice-doublepoint-lux-v1",
+      "id": "4a32d7a97738111cb5e7b0b8ad9f5957ab88fae89a0ffd9078d2d3ac29092ef0",
+      "task_id": "4277551",
+      "version": "G1",
+      "requested_faces": 20000,
+      "triangles": 19998,
+      "source_bytes": 2493092,
+      "source_sha256": "df334f8be3bd5fac4baa274c3d1cb6458592d225d59a648058e64d29216e4fe2",
+      "bytes": 679540,
+      "sha256": "4b60cf1fcb9279a4febf0dedccb40544f7123aeafd9c6b96ed1bb9fe3ddd53d3",
+      "geometry_sha256": "cfc06d346dfac1231c80e3eb243fbeb6b56620ab51dcd8003c68174d1e9fe7d3",
+      "textures": "baseColor 1024 px JPEG q90; metallicRoughness 512 px JPEG q88 (originals: 2048 px PNG)"
+    }
+  ]
+}
