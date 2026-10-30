@@ -1,0 +1,16 @@
+/* Shared chapter navigator. chapters.js builds the markup so the labels live in one place. */
+.chapters{display:flex;align-items:center;justify-content:center;flex:1 1 auto;gap:6px;min-width:0;font:14px/1 'Noto Serif SC',serif;letter-spacing:3px}
+.chapters a{display:flex;align-items:baseline;gap:8px;padding:12px 16px;color:#94a0aa;text-decoration:none;white-space:nowrap;border-bottom:1px solid transparent;transition:color .2s,border-color .2s}
+.chapters a b{font:500 11px 'Cormorant Garamond',serif;letter-spacing:1px;color:#b4a074}
+.chapters a small{font-size:10px;letter-spacing:1px;color:#6f7d85}
+.chapters a:hover{color:#eadfc4}
+.chapters a:focus-visible{outline:1px solid #c4ab7b;outline-offset:2px;color:#eadfc4}
+.chapters a[aria-current=page]{color:#f4e8c9;border-bottom-color:#c4ab7b}
+.chapters a[aria-current=page] b{color:#e1c98f}
+.chapters a[aria-current=page] small{color:#a8a08a}
+@media(max-width:760px){
+ .brand>span:last-child,.wordmark>span:last-child{display:none}
+ .chapters{flex:0 1 auto;margin-right:auto;justify-content:flex-start;gap:0;margin-left:6px;font-size:13px;letter-spacing:1px}
+ .chapters a{padding:10px 9px;gap:5px}
+ .chapters a small{display:none}
+}
