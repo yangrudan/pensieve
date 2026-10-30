@@ -40,7 +40,8 @@ def public(m):
 def experiment_items():
     local=[public(m) for m in STATE['memories'].values() if m.get('experimental')]
     cases={m.get('case') for m in local}
-    return local+[public(m) for m in world_lab.bundled_items(ROOT)
+    shared=world_lab.bundled_items(ROOT)+crystal_lab.bundled_items(ROOT)
+    return local+[public(m) for m in shared
                   if m['id'] not in STATE['memories'] and m.get('case') not in cases]
 
 def clients():
@@ -314,20 +315,29 @@ class Handler(SimpleHTTPRequestHandler):
             with file.open('rb') as f:
                 while chunk:=f.read(1024*1024):self.wfile.write(chunk)
             return
-        if path.startswith('/models/') or path.startswith('/photos/'):
+        if path.startswith('/models/') or path.startswith('/photos/') or path.startswith('/crystal-models/'):
             filename = path.rsplit('/',1)[-1]
-            ext = '.glb' if path.startswith('/models/') else '.jpg'
+            ext = '.jpg' if path.startswith('/photos/') else '.glb'
             mid = filename.removesuffix(ext)
             if len(mid)!=64 or any(c not in '0123456789abcdef' for c in mid) or filename != mid+ext:
                 return self.json_response({'error':'Not found'},404)
+            # /crystal-models/ always serves the published light copy (hall use); /models/
+            # prefers the local original and falls back to the published copy.
             file = DATA / filename
+            if path.startswith('/crystal-models/') or (ext=='.glb' and not file.is_file()): file = crystal_lab.bundled_model(ROOT,mid) or DATA / '.missing'
             if not file.is_file(): return self.json_response({'error':'Not found'},404)
             self.send_response(200);self.send_header('Content-Type','model/gltf-binary' if ext=='.glb' else 'image/jpeg');self.send_header('Content-Length',str(file.stat().st_size));self.send_header('Cache-Control','private, max-age=3600');self.end_headers()
             with file.open('rb') as f:
                 while chunk:=f.read(1024*1024):self.wfile.write(chunk)
             return
         if path.startswith('/api/'): return self.json_response({'error':'Not found'},404)
+        self._static=True
         return super().do_GET()
+    def end_headers(self):
+        # Pages, scripts and styles change often; make browsers revalidate (304 when unchanged)
+        # instead of silently reusing a stale copy. Routes that set their own caching are untouched.
+        if self.__dict__.pop('_static',False): self.send_header('Cache-Control','no-cache')
+        super().end_headers()
     def do_POST(self):
         if not self.valid_host() or self.headers.get('X-Pensieve-Token') != TOKEN:
             return self.json_response({'error':'请刷新页面后重试'},403)
@@ -371,6 +381,8 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.json_response(public(item),202)
                 with LOCK:
                     if mid in STATE['memories']:return self.json_response(public(STATE['memories'][mid]))
+                    published=next((m for m in crystal_lab.bundled_items(ROOT) if m['id']==mid),None)
+                    if published:return self.json_response(public(published))
                     if any(not STATE['memories'].get(i,{}).get('experimental') for i in ACTIVE) or len(ACTIVE)>=2:return self.json_response({'error':'请等待当前任务完成'},409)
                     if STATE['attempts']>=LIMIT:return self.json_response({'error':f'已达到本轮 {LIMIT} 次生成上限'},429)
                     m={'id':mid,'experimental':True,'case':settings['case'],'mode':'lux3d','generation_method':'text_to_3d','prompt':settings['prompt'],'name':settings['name']+' · Lux3D','source':'AHOLO Lux3D · 文生 3D','version':'G1','face_count':settings['face_count'],'created_at':time.time(),'status':'submitting','message':'已预留一次生成额度，准备提交水晶样品'}

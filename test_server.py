@@ -227,7 +227,10 @@ class SharedWorldTests(unittest.TestCase):
         self.assertEqual(error.exception.code,404)
 
 class CrystalExperimentTests(unittest.TestCase):
-    setUp=GenerationGuardTests.setUp
+    def setUp(self):
+        GenerationGuardTests.setUp(self)
+        # These tests cover the generation path, so start from a clone with no published crystals.
+        patch.object(server.crystal_lab,'SHARED','no-published-crystals').start()
     tearDown=GenerationGuardTests.tearDown
     def submit(self,case='emerald-quartz-lux-v1',token=True,**extra):
         headers={'Content-Type':'application/json'}
@@ -297,5 +300,85 @@ class CrystalExperimentTests(unittest.TestCase):
         self.assertFalse(verify(item,{'items':[],'total':1},set(),now=1200))
         self.assertFalse(verify(item,{'items':[{'taskId':42,'created':1010}],'total':1},set(),now=1200))
         self.assertTrue(verify(item,{'items':[{'taskId':42,'created':900}],'total':1},set(),now=1200))
+
+class CacheHeaderTests(unittest.TestCase):
+    """Static files must be revalidated; routes with their own caching rules keep them."""
+    setUp=GenerationGuardTests.setUp
+    tearDown=GenerationGuardTests.tearDown
+
+    def headers(self,path):
+        with urllib.request.urlopen(self.root+path) as response:return response.headers
+
+    def test_static_files_revalidate_while_api_and_assets_keep_their_own_rules(self):
+        self.assertEqual(self.headers('/atlas/').get_all('Cache-Control'),['no-cache'])
+        self.assertEqual(self.headers('/atlas/atlas.css').get_all('Cache-Control'),['no-cache'])
+        self.assertEqual(self.headers('/api/session').get_all('Cache-Control'),['no-store'])
+        mid,_=server.crystal_lab.prototype('emerald-quartz-lux-v1')
+        self.assertEqual(self.headers(f'/crystal-models/{mid}.glb').get_all('Cache-Control'),['private, max-age=3600'])
+
+class PublishedCrystalTests(unittest.TestCase):
+    """Lux3D crystals shipped in shared/lux3d-crystals: viewable without a key, never spend."""
+    setUp=GenerationGuardTests.setUp
+    tearDown=GenerationGuardTests.tearDown
+    submit=CrystalExperimentTests.submit
+    CASE='emerald-quartz-lux-v1'
+
+    def publish(self,payload=b'published-glb',**override):
+        patch.object(server,'ROOT',server.DATA).start()
+        mid,_=server.crystal_lab.prototype(self.CASE)
+        folder=server.DATA/server.crystal_lab.SHARED;folder.mkdir(parents=True)
+        (folder/f'{mid}.glb').write_bytes(payload)
+        entry={'case':self.CASE,'id':mid,'task_id':'4276230','sha256':hashlib.sha256(payload).hexdigest(),'bytes':len(payload),**override}
+        (folder/'index.json').write_text(json.dumps({'items':[entry]}))
+        server.save();return mid,folder
+
+    def get(self,path):
+        with urllib.request.urlopen(self.root+path) as response:return response.status,response.read()
+
+    def missing(self,path):
+        with self.assertRaises(urllib.error.HTTPError) as error:self.get(path)
+        return error.exception.code
+
+    def test_published_crystal_is_listed_ready_without_touching_personal_state(self):
+        mid,_=self.publish();before=(server.DATA/'state.json').read_bytes()
+        listing=json.loads(self.get('/api/experiments')[1]);item=listing['items'][0]
+        self.assertEqual((item['id'],item['status'],item['case']),(mid,'ready',self.CASE))
+        self.assertEqual(item['model_url'],f'/models/{mid}.glb');self.assertEqual(listing['attempts'],0)
+        self.assertEqual(json.loads(self.get('/api/memories')[1])['items'],[])
+        self.assertEqual((server.DATA/'state.json').read_bytes(),before)
+
+    def test_submitting_a_published_design_returns_it_and_spends_nothing(self):
+        mid,_=self.publish()
+        status,entry=self.submit(self.CASE);self.assertEqual((status,entry['id']),(200,mid))
+        self.assertEqual(server.STATE['attempts'],0);self.assertEqual(server.STATE['memories'],{});self.start.assert_not_called()
+
+    def test_hall_and_model_routes_serve_only_verified_published_files(self):
+        mid,_=self.publish(b'published-glb')
+        self.assertEqual(self.get(f'/crystal-models/{mid}.glb'),(200,b'published-glb'))
+        self.assertEqual(self.get(f'/models/{mid}.glb')[1],b'published-glb')
+        (server.DATA/f'{mid}.glb').write_bytes(b'local-original')
+        self.assertEqual(self.get(f'/models/{mid}.glb')[1],b'local-original')
+        self.assertEqual(self.get(f'/crystal-models/{mid}.glb')[1],b'published-glb')
+        self.assertEqual(self.missing(f'/photos/{mid}.jpg'),404)
+        self.assertEqual(self.missing('/crystal-models/'+'a'*64+'.glb'),404)
+        self.assertEqual(self.missing('/crystal-models/index.json'),404)
+
+    def test_tampered_or_unlisted_files_are_not_served_or_listed(self):
+        mid,folder=self.publish(b'published-glb')
+        (folder/f'{mid}.glb').write_bytes(b'tampered!!!!!')
+        self.assertEqual(self.missing(f'/crystal-models/{mid}.glb'),404)
+        self.assertEqual(json.loads(self.get('/api/experiments')[1])['items'],[])
+        stray=folder/('b'*64+'.glb');stray.write_bytes(b'stray')
+        self.assertEqual(self.missing('/crystal-models/'+'b'*64+'.glb'),404)
+
+    def test_index_entries_must_match_the_fixed_catalog(self):
+        # Each bad entry is rejected; a bad entry never blocks a genuine submission's budget check.
+        for override in ({'id':'c'*64},{'case':'not-a-design'},{'sha256':'zz'},{'bytes':1}):
+            with self.subTest(override=override):
+                mid,folder=self.publish(**override)
+                self.assertEqual(server.crystal_lab.bundled_items(server.ROOT),[])
+                self.assertIsNone(server.crystal_lab.bundled_model(server.ROOT,mid))
+                self.assertEqual(self.missing(f'/crystal-models/{mid}.glb'),404)
+                import shutil;shutil.rmtree(folder)
 
 if __name__=='__main__':unittest.main()
