@@ -1,7 +1,9 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from '../../vendor/OrbitControls.js';
+import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { setupMemoryLinker } from './linker.js?v=20261022-3';
-import { createCrystalGeometry,createCrystalEnvironment,createCrystal,CRYSTAL_SHAPES,crystalShapeForPlace } from './crystal.js?v=20261029-6';
+import { createCrystalGeometry,createCrystalEnvironment,createLuxCrystalMaterial,LUX_TARGET_HEIGHT,LUX_GRADE,CRYSTAL_SHAPES,crystalShapeForPlace } from './crystal.js?v=20261030-4';
+import { CRYSTAL_MODELS } from '../crystal-lab/catalog.js?v=20261030-1';
 
 // Mesh owns all navigable structure and clickable landmarks. Cached AHOLO
 // panoramas provide environmental illumination, never duplicate GS geometry.
@@ -18,10 +20,12 @@ export function createRealm(onSelect){
  const camera=new THREE.PerspectiveCamera(55,1,.1,95),controls=new OrbitControls(camera,canvas);
  controls.enableDamping=true;controls.dampingFactor=.075;controls.enablePan=false;controls.minDistance=3.8;controls.maxDistance=17;
  controls.minPolarAngle=.52;controls.maxPolarAngle=1.47;controls.rotateSpeed=.38;controls.zoomSpeed=.55;
- const ambient=new THREE.HemisphereLight(0xaecbe5,0x343341,2.3);scene.add(ambient);
- const moon=new THREE.DirectionalLight(0xb5d9ff,3.4);moon.position.set(-8,12,-7);moon.castShadow=true;moon.shadow.mapSize.set(1024,1024);moon.shadow.camera.left=-15;moon.shadow.camera.right=15;moon.shadow.camera.top=15;moon.shadow.camera.bottom=-15;moon.shadow.normalBias=.035;scene.add(moon);
- const warm=new THREE.PointLight(0xffc98a,70,32,2);warm.position.set(0,6,5);scene.add(warm);
- const loader=new THREE.TextureLoader(),stone=new THREE.MeshStandardMaterial({color:0x93958f,roughness:.93}),darkStone=new THREE.MeshStandardMaterial({color:0x313b49,roughness:.72,metalness:.15}),gold=new THREE.MeshStandardMaterial({color:0xc9ab72,metalness:.72,roughness:.32});
+ // Candlelight, to match the parchment map on the home page: a warm key light from the
+ // lamps, a dim cool fill for the window side, and the stone kept sand-coloured.
+ const ambient=new THREE.HemisphereLight(0xdcc29a,0x37302c,2.2);scene.add(ambient);
+ const moon=new THREE.DirectionalLight(0xffd9a2,3.1);moon.position.set(-8,12,-7);moon.castShadow=true;moon.shadow.mapSize.set(1024,1024);moon.shadow.camera.left=-15;moon.shadow.camera.right=15;moon.shadow.camera.top=15;moon.shadow.camera.bottom=-15;moon.shadow.normalBias=.035;scene.add(moon);
+ const warm=new THREE.PointLight(0xffb463,95,34,2);warm.position.set(0,5.4,4);scene.add(warm);
+ const loader=new THREE.TextureLoader(),stone=new THREE.MeshStandardMaterial({color:0xa79b86,roughness:.93}),darkStone=new THREE.MeshStandardMaterial({color:0x4a3b2c,roughness:.72,metalness:.12}),gold=new THREE.MeshStandardMaterial({color:0xcfae6e,metalness:.72,roughness:.3});
  loader.load('/assets/limestone-albedo.webp',t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(1.5,2);t.anisotropy=4;stone.map=t;stone.bumpMap=t;stone.bumpScale=.06;stone.needsUpdate=true;dirty=true;});
  const floorMat=new THREE.MeshStandardMaterial({color:0xb8bcc3,roughness:.82,metalness:.1});
  loader.load('/assets/stone-floor-unique.webp',t=>{t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;floorMat.map=t;floorMat.needsUpdate=true;dirty=true;});
@@ -49,8 +53,8 @@ export function createRealm(onSelect){
   if(i%2===0){const lampMat=new THREE.MeshStandardMaterial({color:0xffd3a0,emissive:0xffb75b,emissiveIntensity:2});const lamp=mesh(new THREE.CylinderGeometry(.12,.14,.42,8),lampMat,group,2.2,3.3,-.45);lamp.castShadow=false;lanterns.push(lamp);mesh(new THREE.BoxGeometry(.08,.25,.5),gold,group,2.2,3.04,-.23);}
   const rib=[];for(let j=0;j<=24;j++){const t=j/24*Math.PI/2;rib.push(new THREE.Vector3(Math.sin(a)*Math.cos(t)*13.6,10.45+Math.sin(t)*4.3,Math.cos(a)*Math.cos(t)*13.6));}mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rib),28,.07,5,false),darkStone);
  }
- const ceiling=mesh(new THREE.SphereGeometry(14.05,48,16,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({color:0x344458,side:THREE.BackSide,roughness:1}),scene,0,10.4,0);ceiling.scale.y=.31;
- const backdrop=mesh(new THREE.SphereGeometry(57,48,24),new THREE.MeshBasicMaterial({color:0x15283e,side:THREE.BackSide,depthWrite:false,fog:false}));backdrop.castShadow=false;backdrop.receiveShadow=false;backdrop.rotation.y=-Math.PI/2;
+ const ceiling=mesh(new THREE.SphereGeometry(14.05,48,16,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({color:0x4a3d30,side:THREE.BackSide,roughness:1}),scene,0,10.4,0);ceiling.scale.y=.31;
+ const backdrop=mesh(new THREE.SphereGeometry(57,48,24),new THREE.MeshBasicMaterial({color:0x2a2018,side:THREE.BackSide,depthWrite:false,fog:false}));backdrop.castShadow=false;backdrop.receiveShadow=false;backdrop.rotation.y=-Math.PI/2;
  // The basin has a hollow rim, an opaque bowl, and a separate animated surface.
  const basin=new THREE.Group();basin.position.z=.8;scene.add(basin);
  mesh(new THREE.CylinderGeometry(2.6,2.78,.2,64),darkStone,basin,0,.1,0);
@@ -66,14 +70,14 @@ export function createRealm(onSelect){
  function status(message){$('#hall-status').textContent=message;}
  async function loadMood(next){
   mood=next;dirty=true;const seq=++moodSeq;$('#hall-mood').textContent=next==='moon'?'☾ 月光':'☀ 日光';$('#hall-mood').setAttribute('aria-pressed',String(next==='day'));status('正在读取本地 AHOLO 光景…');
-  ambient.color.set(next==='moon'?0xaecbe5:0xe2e7de);ambient.intensity=next==='moon'?2.3:2.8;moon.color.set(next==='moon'?0xb5d9ff:0xffe9c7);renderer.toneMappingExposure=next==='moon'?1.15:1.25;
+  ambient.color.set(next==='moon'?0xdcc29a:0xe8d6ba);ambient.intensity=next==='moon'?2.2:2.65;moon.color.set(next==='moon'?0xffd9a2:0xffe9c7);renderer.toneMappingExposure=next==='moon'?1.08:1.18;
   try{
    let cached=environmentCache.get(next);
    if(!cached){const r=await fetch('/api/experiments',{signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error();const j=await r.json();const source=j.items.find(x=>x.case===(next==='moon'?'stone-hall-reference-v1':'stone-hall-daylight-v1')&&x.status==='ready');if(!source?.world_assets?.panorama_url)throw Error();
     const texture=await loader.loadAsync(source.world_assets.panorama_url);if(disposed){texture.dispose();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.mapping=THREE.EquirectangularReflectionMapping;
-    const lightCanvas=document.createElement('canvas');lightCanvas.width=1024;lightCanvas.height=512;const lightContext=lightCanvas.getContext('2d');lightContext.filter='blur(9px)';lightContext.drawImage(texture.image,0,0,1024,512);const lightTexture=new THREE.CanvasTexture(lightCanvas);lightTexture.colorSpace=THREE.SRGBColorSpace;lightTexture.mapping=THREE.EquirectangularReflectionMapping;cached={texture:lightTexture,target:pmrem.fromEquirectangular(lightTexture)};texture.dispose();environmentCache.set(next,cached);
+    const lightCanvas=document.createElement('canvas');lightCanvas.width=1024;lightCanvas.height=512;const lightContext=lightCanvas.getContext('2d');lightContext.filter='blur(9px) sepia(28%) saturate(92%) hue-rotate(8deg) brightness(105%)';lightContext.drawImage(texture.image,0,0,1024,512);const lightTexture=new THREE.CanvasTexture(lightCanvas);lightTexture.colorSpace=THREE.SRGBColorSpace;lightTexture.mapping=THREE.EquirectangularReflectionMapping;cached={texture:lightTexture,target:pmrem.fromEquirectangular(lightTexture)};texture.dispose();environmentCache.set(next,cached);
    }
-   if(seq!==moodSeq||disposed)return;scene.environment=cached.target.texture;backdrop.material.map=cached.texture;backdrop.material.color.setHex(0x8293a7);backdrop.material.needsUpdate=true;dirty=true;
+   if(seq!==moodSeq||disposed)return;scene.environment=cached.target.texture;backdrop.material.map=cached.texture;backdrop.material.color.setHex(0xbfa88c);backdrop.material.needsUpdate=true;dirty=true;
    canvas.dataset.aholoEnvironment=next;status('AHOLO 光景已接入 · 结构与地点固定');
   }catch{if(seq===moodSeq&&!disposed)status('光景暂未读到 · 可继续探索大厅和记忆');}
  }
@@ -82,12 +86,36 @@ export function createRealm(onSelect){
  const glowCanvas=document.createElement('canvas');glowCanvas.width=128;glowCanvas.height=128;const ctx=glowCanvas.getContext('2d'),gradient=ctx.createRadialGradient(64,64,0,64,64,64);gradient.addColorStop(0,'#ffffffaa');gradient.addColorStop(.25,'#ffffff33');gradient.addColorStop(1,'#ffffff00');ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);const glowMap=new THREE.CanvasTexture(glowCanvas);
  function position(i){const positions=[[-6,0,1],[-3.5,0,-3.2],[0,0,-5],[3.5,0,-3.2],[6,0,1]];if(i<5)return new THREE.Vector3(...positions[i]);const a=(i-5)/7*Math.PI*1.65+.55;return new THREE.Vector3(Math.sin(a)*10,0,Math.cos(a)*10);}
  const gemGeometries=Object.fromEntries(CRYSTAL_SHAPES.map(shape=>[shape,createCrystalGeometry(shape)])),sharedGeometry=new Set([...Object.values(gemGeometries),pedestalFoot,pedestalBody,pedestalCap]),crystalEnvironment=createCrystalEnvironment(renderer);
- function clearNodes(){nodeRoot.traverse(n=>{if(n.material)for(const material of Array.isArray(n.material)?n.material:[n.material])if(![stone,darkStone,gold].includes(material))material.dispose();if(n.geometry&&!sharedGeometry.has(n.geometry))n.geometry.dispose();});scene.remove(nodeRoot);nodeRoot=new THREE.Group();scene.add(nodeRoot);nodes=[];labels.replaceChildren();}
+ const glbLoader=new GLTFLoader(),luxGeometry=new Map(),luxSeq={};
+ function clearNodes(){nodeRoot.traverse(n=>{if(n.material)for(const material of Array.isArray(n.material)?n.material:[n.material])if(![stone,darkStone,gold].includes(material))material.dispose();if(n.geometry&&!sharedGeometry.has(n.geometry)&&!luxGeometry.has(n.geometry.uuid))n.geometry.dispose();});scene.remove(nodeRoot);nodeRoot=new THREE.Group();scene.add(nodeRoot);nodes=[];labels.replaceChildren();}
+
+ // The real AHOLO Lux3D mesh for a place, if one was generated for it. The GLB geometry is
+ // fetched once per design and shared between stands; each stand gets its own material so
+ // the per-stone colour grade stays separate. Falls back to the procedural gem on failure.
+ async function luxCrystal(place,shape){
+  const design=CRYSTAL_MODELS.find(x=>x.place_id===place.id)||CRYSTAL_MODELS.find(x=>x.shape===shape);
+  if(!design)return null;
+  let geometry=luxGeometry.get(design.model_id);
+  if(!geometry){
+   const gltf=await glbLoader.loadAsync(`/crystal-models/${design.model_id}.glb`);
+   let source;gltf.scene.traverse(n=>{if(!source&&n.isMesh)source=n;});if(!source)throw Error('no mesh in '+design.model_id);
+   geometry=source.geometry;geometry.computeBoundingBox();luxGeometry.set(design.model_id,geometry);luxGeometry.set(geometry.uuid,design.model_id);
+   geometry.userData.luxBase={map:source.material.map||null,normalMap:source.material.normalMap||null,normalScale:source.material.normalScale?.clone(),side:source.material.side};
+  }
+  const box=geometry.boundingBox,k=(LUX_TARGET_HEIGHT[shape]||2.4)/(box.max.y-box.min.y);
+  const crystal=new THREE.Mesh(geometry,createLuxCrystalMaterial(geometry.userData.luxBase,place.color,crystalEnvironment.texture,{transmission:0,scale:k,glow:.16,grade:LUX_GRADE[shape]}));
+  crystal.scale.setScalar(k);crystal.position.set(-(box.min.x+box.max.x)/2*k,-box.min.y*k,-(box.min.z+box.max.z)/2*k);
+  crystal.castShadow=false;crystal.receiveShadow=false;
+  const holder=new THREE.Group();holder.add(crystal);holder.userData.shape=shape;holder.userData.source='aholo-lux3d';
+  return holder;
+ }
  function setPlaces(places,counts){
-  clearNodes();places.forEach((place,i)=>{const pos=position(i),group=new THREE.Group();group.position.copy(pos);nodeRoot.add(group);
+  clearNodes();const seq=++luxSeq.loading||1;luxSeq.loading=seq;places.forEach((place,i)=>{const pos=position(i),group=new THREE.Group();group.position.copy(pos);nodeRoot.add(group);
    mesh(pedestalFoot,darkStone,group,0,.12,0);mesh(pedestalBody,stone,group,0,.7,0);mesh(pedestalCap,gold,group,0,1.29,0);
    const gemGroup=new THREE.Group();gemGroup.position.y=1.5;gemGroup.userData.placeId=place.id;group.add(gemGroup);
-   const shape=crystalShapeForPlace(place.id),gem=createCrystal(place.color,crystalEnvironment.texture,gemGeometries[shape],shape);gemGroup.add(gem);gem.rotation.y=shape==='heart'?.12:i*.42;
+   const shape=crystalShapeForPlace(place.id);
+   let gem=new THREE.Mesh(gemGeometries[shape],new THREE.MeshPhysicalMaterial({color:place.color,metalness:0,roughness:.2,envMap:crystalEnvironment.texture,envMapIntensity:.6,clearcoat:.8}));gem.userData.source='placeholder';gemGroup.add(gem);gem.rotation.y=shape==='heart'?.12:i*.42;
+   luxCrystal(place,shape).then(real=>{if(luxSeq.loading!==seq||disposed||!real)return;gemGroup.remove(gem);if(gem.userData.source==='placeholder')gem.material.dispose();gem=real;gemGroup.add(gem);gem.rotation.y=shape==='heart'?.12:i*.42;dirty=true;}).catch(()=>{});
    const aura=new THREE.Sprite(new THREE.SpriteMaterial({map:glowMap,color:place.color,transparent:true,opacity:.12,blending:THREE.AdditiveBlending,depthWrite:false}));aura.position.y=2.15;aura.scale.set(2.7,2.7,1);group.add(aura);
    const marker=ring(.9,.025,.03,new THREE.MeshBasicMaterial({color:place.color,transparent:true,opacity:.6}),group);
    const symbol=mesh(new THREE.TorusGeometry(.24,.012,5,32),gold,group,0,.73,.715);symbol.rotation.y=.05;

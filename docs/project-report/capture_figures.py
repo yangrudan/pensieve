@@ -25,7 +25,7 @@ with sync_playwright() as p:
         elif path=='experiments':route.fulfill(json={'items':index['items'],'attempts':19,'limit':40})
         else:route.abort()
     page.route('**/api/**',intercept)
-    page.goto('http://127.0.0.1:4174/',wait_until='domcontentloaded')
+    page.goto('http://127.0.0.1:4174/pensieve/',wait_until='domcontentloaded')
     page.wait_for_timeout(2200);page.screenshot(path=str(OUT/'chapter-1.png'));print('Captured chapter 1',flush=True)
     page.goto('http://127.0.0.1:4174/atlas/',wait_until='domcontentloaded')
     page.locator('#atlas-scene[data-ready=true]').wait_for(timeout=120000)

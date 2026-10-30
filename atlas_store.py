@@ -2,11 +2,11 @@
 import hashlib, time, uuid
 
 DEFAULT_PLACES = [
-    {'id':'home','name':'家','color':'#73ddbe'},
-    {'id':'work','name':'工作室','color':'#9ca5ff'},
-    {'id':'journey','name':'旅途中','color':'#edbc77'},
-    {'id':'garden','name':'花园','color':'#e998bb'},
-    {'id':'hometown','name':'故乡','color':'#78c9ed'},
+    {'id':'home','name':'家','color':'#8fc6ab'},
+    {'id':'work','name':'工作室','color':'#ab8fc6'},
+    {'id':'journey','name':'旅途中','color':'#c6b48f'},
+    {'id':'garden','name':'花园','color':'#c68f9d'},
+    {'id':'hometown','name':'故乡','color':'#8fb4c6'},
 ]
 
 def snapshot(state):
