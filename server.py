@@ -338,6 +338,40 @@ class Handler(SimpleHTTPRequestHandler):
         # instead of silently reusing a stale copy. Routes that set their own caching are untouched.
         if self.__dict__.pop('_static',False): self.send_header('Cache-Control','no-cache')
         super().end_headers()
+    def do_DELETE(self):
+        if not self.valid_host() or self.headers.get('X-Pensieve-Token') != TOKEN:
+            return self.json_response({'error':'请刷新页面后重试'},403)
+        origin = self.headers.get('Origin')
+        if origin and origin not in (f'http://localhost:{PORT}',f'http://127.0.0.1:{PORT}'):
+            return self.json_response({'error':'Invalid origin'},403)
+        match = re.fullmatch(r'/api/memories/([0-9a-f]{64})', urlsplit(self.path).path)
+        if not match: return self.json_response({'error':'记忆不存在'},404)
+        mid = match.group(1)
+        with LOCK:
+            memories = STATE['memories']
+            archives = STATE.get('archives',{})
+            if mid not in memories and mid not in archives:
+                return self.json_response({'error':'记忆不存在'},404)
+            if mid in ACTIVE:
+                return self.json_response({'error':'这段记忆正在生成，请完成后再删除'},409)
+            if any(m.get('view_source_id') == mid for m in memories.values()):
+                return self.json_response({'error':'其他记忆仍在使用这组照片，请先删除关联记忆'},409)
+            # Only remove files owned by this validated identifier. Quota is never refunded.
+            try:
+                for suffix in ('.jpg','.glb','.part'):
+                    (DATA / f'{mid}{suffix}').unlink(missing_ok=True)
+                folder = DATA / mid
+                if folder.is_dir():
+                    import shutil
+                    shutil.rmtree(folder)
+            except OSError:
+                return self.json_response({'error':'本地文件暂时无法删除，请重试'},500)
+            memories.pop(mid,None)
+            archives.pop(mid,None)
+            STATE.get('memory_places',{}).pop(mid,None)
+            save()
+        return self.json_response({'deleted':mid})
+
     def do_POST(self):
         if not self.valid_host() or self.headers.get('X-Pensieve-Token') != TOKEN:
             return self.json_response({'error':'请刷新页面后重试'},403)
