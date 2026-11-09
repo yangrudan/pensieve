@@ -26,6 +26,43 @@ class GenerationGuardTests(unittest.TestCase):
         try:
             with urllib.request.urlopen(req) as r:return r.status,json.load(r)
         except urllib.error.HTTPError as e:return e.code,json.load(e)
+    def delete(self,mid,token=True,**headers):
+        if token: headers['X-Pensieve-Token']=server.TOKEN
+        req=urllib.request.Request(self.root+'/api/memories/'+mid,method='DELETE',headers=headers)
+        try:
+            with urllib.request.urlopen(req) as r:return r.status,json.load(r)
+        except urllib.error.HTTPError as e:return e.code,json.load(e)
+    def test_delete_removes_saved_memory_files_and_tags_without_refunding(self):
+        _,m=self.post();mid=m['id']
+        server.STATE['memory_places']={mid:['home']}
+        (server.DATA/f'{mid}.glb').write_bytes(b'model')
+        folder=server.DATA/mid;folder.mkdir();(folder/'panorama.jpg').write_bytes(b'photo')
+        self.assertEqual(self.delete(mid)[0],200)
+        persisted=json.loads((server.DATA/'state.json').read_text())
+        self.assertNotIn(mid,persisted['memories']);self.assertNotIn(mid,persisted['memory_places'])
+        self.assertEqual(persisted['attempts'],1)
+        self.assertFalse((server.DATA/f'{mid}.jpg').exists())
+        self.assertFalse((server.DATA/f'{mid}.glb').exists());self.assertFalse(folder.exists())
+        self.assertEqual(self.delete(mid)[0],404)
+    def test_delete_guards_active_tasks_token_origin_and_paths(self):
+        _,m=self.post();mid=m['id']
+        self.assertEqual(self.delete(mid,token=False)[0],403)
+        self.assertEqual(self.delete(mid,Origin='https://untrusted.example')[0],403)
+        self.assertEqual(self.delete('../state.json')[0],404)
+        server.ACTIVE.add(mid)
+        self.assertEqual(self.delete(mid)[0],409);self.assertIn(mid,server.STATE['memories'])
+    def test_delete_archive_and_preserve_other_memories(self):
+        mid='a'*64;server.STATE['archives']={mid:{'id':mid}}
+        (server.DATA/f'{mid}.jpg').write_bytes(b'photo')
+        _,m=self.post()
+        self.assertEqual(self.delete(mid)[0],200)
+        self.assertNotIn(mid,server.STATE['archives']);self.assertIn(m['id'],server.STATE['memories'])
+    def test_delete_keeps_referenced_source(self):
+        _,m=self.post(mode='fourview');mid=m['id']
+        server.STATE['memories']['dependent']={'view_source_id':mid}
+        self.assertEqual(self.delete(mid)[0],409)
+        self.assertTrue((server.DATA/f'{mid}.jpg').exists())
+
     def test_duplicate_reuses_job_and_survives_reload(self):
         status,a=self.post();self.assertEqual(status,202)
         server.STATE=json.loads((server.DATA/'state.json').read_text())

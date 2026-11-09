@@ -1,5 +1,5 @@
 import { createMagicScene } from './magic-scene.js';
-import { displayMemory, loadSavedMemories, stopModelView } from './memory3d.js';
+import { displayMemory, loadSavedMemories, stopModelView, deleteMemory } from './memory3d.js';
 import * as THREE from './vendor/three.module.js';
 const $=s=>document.querySelector(s), reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const renderer=new THREE.WebGLRenderer({canvas:$('#scene'),antialias:true,alpha:true});
@@ -48,7 +48,7 @@ $('#photos').addEventListener('change',e=>selectFiles(e.target.files));$('#clear
 const drop=$('#drop');for(const type of ['dragenter','dragover'])drop.addEventListener(type,e=>{e.preventDefault();drop.classList.add('drag')});for(const type of ['dragleave','drop'])drop.addEventListener(type,e=>{e.preventDefault();drop.classList.remove('drag')});drop.addEventListener('drop',e=>selectFiles(e.dataTransfer.files));
 $('#pour').onclick=()=>{if(!selected.length||pouring)return;pouring=true;playRitualSound('pour');$('#pour').disabled=true;$('#photos').disabled=true;$('#clear').disabled=true;$('#enter').hidden=true;$('#status').textContent='记忆正在化作银丝，落入水中…';$('#pool-title').textContent='A MEMORY TAKES SHAPE';if(texture)texture.dispose();texture=new THREE.Texture(selected[0].img);texture.colorSpace=THREE.SRGBColorSpace;texture.needsUpdate=true;waterUniforms.photo.value=texture;waterUniforms.aspect.value=selected[0].img.width/selected[0].img.height;waterUniforms.hasPhoto.value=0;if(reduced){waterUniforms.hasPhoto.value=1;finishPour()}else pourAt=clock.getElapsedTime()};
 function finishPour(){memories.push(...selected);index=memories.length-selected.length;selected=[];pouring=false;$('#selection').hidden=true;$('#thumb').removeAttribute('src');$('#photos').disabled=false;$('#clear').disabled=false;$('#status').textContent='记忆已入水。触碰水面，重返那一刻。';$('#pool-title').textContent='YOUR MEMORY LIVES HERE';$('#pool-hint').textContent='每一次凝视，都是一次重逢';$('#memory-total').textContent=`已珍藏 ${memories.length} 段记忆 · 本次会话`;$('#enter').hidden=false;renderShelf()}
-function showPhoto(){const m=memories[index];displayMemory(m);$('#memory-photo').src=m.url;$('#memory-photo').alt=m.name;$('#memory-index').textContent=`${String(index+1).padStart(2,'0')} / ${String(memories.length).padStart(2,'0')}`;$('#prev').disabled=memories.length<2;$('#next').disabled=memories.length<2;renderShelf()}
+function showPhoto(){$('#delete-status').textContent='';const m=memories[index];displayMemory(m);$('#memory-photo').src=m.url;$('#memory-photo').alt=m.name;$('#memory-index').textContent=`${String(index+1).padStart(2,'0')} / ${String(memories.length).padStart(2,'0')}`;$('#prev').disabled=memories.length<2;$('#next').disabled=memories.length<2;renderShelf()}
 function enterMemory(){if(!memories.length||pouring||entering||!$('#memory-view').hidden)return;entering=true;playRitualSound('enter');$('#enter').disabled=true;diveAt=clock.getElapsedTime();document.body.classList.add('is-diving');setTimeout(()=>{$('#memory-view').hidden=false;document.body.classList.remove('is-diving');document.body.classList.add('in-memory');showPhoto();$('#close').focus();entering=false;},reduced?0:1550)}$('#enter').onclick=enterMemory;$('#close').onclick=()=>{$('#memory-view').hidden=true;document.body.classList.remove('in-memory');stopModelView();diveAt=null;entering=false;$('#enter').disabled=false;resize();$('#enter').focus()};$('#prev').onclick=()=>{index=(index-1+memories.length)%memories.length;showPhoto()};$('#next').onclick=()=>{index=(index+1)%memories.length;showPhoto()};
 addEventListener('keydown',e=>{if($('#memory-view').hidden)return;if(e.key==='Escape')$('#close').click();if(e.key==='ArrowLeft')$('#prev').click();if(e.key==='ArrowRight')$('#next').click();if(e.key==='Tab'){const focusable=[...$('#memory-view').querySelectorAll('button,a[href],summary,input,select,[tabindex]')].filter(el=>!el.disabled&&el.getClientRects().length);let i=focusable.indexOf(document.activeElement);e.preventDefault();focusable[(i+(e.shiftKey?-1:1)+focusable.length)%focusable.length].focus()}});
 const raycaster=new THREE.Raycaster();$('#scene').addEventListener('click',e=>{raycaster.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1),camera);if(raycaster.intersectObject(water).length)enterMemory()});
@@ -61,3 +61,28 @@ function renderShelf(){const shelf=$('#memory-shelf');shelf.replaceChildren();sh
 if(!reduced)addEventListener('pointermove',e=>{if($('#memory-view').hidden||$('#memory-photo').hidden)return;const x=(e.clientX/innerWidth-.5)*6,y=(e.clientY/innerHeight-.5)*-5;$('#memory-photo').style.transform=`perspective(1200px) rotateX(${y}deg) rotateY(${x}deg) translateZ(12px)`;});
 
 function playRitualSound(kind){if(!audioContext||audioContext.state!=='running')return;const t=audioContext.currentTime,voice=audioContext.createGain();voice.gain.setValueAtTime(.0001,t);voice.gain.exponentialRampToValueAtTime(kind==='pour'?.035:.025,t+.15);voice.gain.exponentialRampToValueAtTime(.0001,t+1.6);voice.connect(audioContext.destination);for(const [i,f] of (kind==='pour'?[659.25,987.77,1318.5]:[220,329.63,440]).entries()){const o=audioContext.createOscillator();o.type='sine';o.frequency.setValueAtTime(f,t+i*.08);o.frequency.exponentialRampToValueAtTime(f*(kind==='enter'?.5:1.015),t+1.5);o.connect(voice);o.start(t+i*.08);o.stop(t+1.7);}}
+
+let deleting=false;
+$('#delete-memory').onclick=async()=>{
+ const m=memories[index];
+ if(!m||deleting)return;
+ if(!confirm(`删除“${m.name||'这段记忆'}”？本机保存的照片、模型和地点标记将一并删除，无法撤销。已使用的生成额度不会返还。`))return;
+ deleting=true;$('#delete-memory').disabled=true;
+ try{
+  await deleteMemory(m);
+  const removed=memories.indexOf(m);memories.splice(removed,1);discard([m]);
+  index=Math.min(index,Math.max(0,memories.length-1));
+  texture?.dispose();texture=null;waterUniforms.photo.value=null;
+  if(memories.length){
+   const next=memories[index];texture=new THREE.Texture(next.img);texture.colorSpace=THREE.SRGBColorSpace;texture.needsUpdate=true;
+   waterUniforms.photo.value=texture;waterUniforms.aspect.value=next.img.width/next.img.height;waterUniforms.hasPhoto.value=1;
+   $('#pool-hint').textContent=next.name;showPhoto();
+  }else{
+   $('#close').click();waterUniforms.hasPhoto.value=0;$('#enter').hidden=true;
+   $('#memory-photo').removeAttribute('src');$('#pool-title').textContent='THE WATER REMEMBERS';$('#pool-hint').textContent='移动光标，凝视水面';$('#photos').focus();
+  }
+  $('#memory-total').textContent=memories.length?`已收藏 ${memories.length} 段记忆`:'尚未存入记忆';
+  $('#status').textContent='记忆已删除';renderShelf();
+ }catch(e){$('#delete-status').textContent=e.message;}
+ finally{deleting=false;$('#delete-memory').disabled=false;}
+};

@@ -2,7 +2,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { OrbitControls } from '../vendor/OrbitControls.js';
 import { CRYSTAL_MODELS } from './crystal-lab/catalog.js?v=20261022-1';
-import { createCrystalEnvironment,createLuxCrystalMaterial,LUX_GRADE } from './hybrid/crystal.js?v=20261029-6';
+import { createCrystalEnvironment,createLuxCrystalMaterial,LUX_GRADE } from './hybrid/crystal.js?v=20261030-4';
 
 // Shows the real AHOLO Lux3D G1 crystal that was generated for a place's shape. It is loaded only when
 // the viewer is opened, so the hall itself never downloads or decodes these models.

@@ -44,7 +44,7 @@ function start(){
  const floor=part(new THREE.PlaneGeometry(60,60),new THREE.MeshStandardMaterial({color:0x172725,metalness:.15,roughness:.5}),-.01);floor.rotation.x=-Math.PI/2;floor.visible=!aholoMode;
  const loader=new THREE.TextureLoader();loader.load('/assets/limestone-albedo.webp',texture=>{texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(2,1);stone.map=texture;stone.needsUpdate=true;dirty=true;});
  let crystal,dirty=true,disposed=false,frameId;
- const colors=[['翡翠绿','#73ddbe'],['紫水晶','#9ca5ff'],['琥珀金','#edbc77'],['蔷薇粉','#e998bb'],['冰川蓝','#78c9ed']];
+ const colors=[['青玉','#8fc6ab'],['薰衣草','#ab8fc6'],['琥珀','#c6b48f'],['玫瑰','#c68f9d'],['雾蓝','#8fb4c6']];
  const swatches=document.querySelector('.swatches');
  function select(index){
   if(crystal){scene.remove(crystal);crystal.traverse(node=>node.material?.dispose());}
